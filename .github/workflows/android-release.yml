@@ -1,0 +1,100 @@
+name: Android Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example v0.1.0)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: android-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+jobs:
+  signed-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - name: Validate release tag and version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { echo 'Use a tag such as v0.1.0'; exit 1; }
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          git merge-base --is-ancestor HEAD origin/master
+          printf 'SIRIN_VERSION_NAME=%s\n' "${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+          printf 'SIRIN_VERSION_CODE=%s\n' "$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/android-environment
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SIRIN_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.SIRIN_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.SIRIN_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.SIRIN_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in "$KEYSTORE_BASE64" "$KEYSTORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD"; do
+            test -n "$value" || { echo 'Configure all four SIRIN signing secrets before publishing'; exit 1; }
+          done
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/sirin-release.jks"
+      - name: Verify and build signed APK
+        env:
+          SIRIN_KEYSTORE_PATH: ${{ runner.temp }}/sirin-release.jks
+          SIRIN_KEYSTORE_PASSWORD: ${{ secrets.SIRIN_KEYSTORE_PASSWORD }}
+          SIRIN_KEY_ALIAS: ${{ secrets.SIRIN_KEY_ALIAS }}
+          SIRIN_KEY_PASSWORD: ${{ secrets.SIRIN_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+      - name: Verify signature and prepare release files
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$apk"
+          mkdir -p release-files
+          cp "$apk" "release-files/SirinMusic-${RELEASE_TAG#v}.apk"
+          (cd release-files && sha256sum ./*.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-release
+          path: release-files/
+          if-no-files-found: error
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sirin-release.jks"
+  publish:
+    needs: signed-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: signed-release
+          path: release-files
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-files/* --clobber
+          else
+            release_args=(--verify-tag --generate-notes --title "Sirin Music ${RELEASE_TAG#v}")
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              release_args+=(--prerelease)
+            fi
+            gh release create "$RELEASE_TAG" release-files/* "${release_args[@]}"
+          fi

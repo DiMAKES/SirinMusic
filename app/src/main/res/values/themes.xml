@@ -1,0 +1,8 @@
+<resources>
+    <!-- Вся отрисовка в Compose (ui/theme/Theme.kt). Этой теме нужно лишь не тянуть
+         AppCompat/MaterialComponents и не рисовать свой ActionBar. -->
+    <style name="Theme.SirinMusic" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

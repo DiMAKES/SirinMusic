@@ -1,0 +1,176 @@
+package ru.rainedev.sirinmusic
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import androidx.navigation.compose.*
+import ru.rainedev.sirinmusic.ui.*
+import ru.rainedev.sirinmusic.ui.theme.SirinMusicTheme
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState); enableEdgeToEdge()
+        val app = application as SirinApp
+        setContent {
+            val appearance by app.settings.appearance.collectAsStateWithLifecycle()
+            SirinMusicTheme(appearance) { Surface(Modifier.fillMaxSize()) { SirinContent(app) } }
+        }
+    }
+}
+
+private data class Destination(val route: String, val label: String, val icon: ImageVector)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SirinContent(app: SirinApp) {
+    val vm: AppViewModel = viewModel(factory = AppViewModel.Factory(app))
+    val state by vm.state.collectAsStateWithLifecycle()
+    val player by vm.playback.ui.collectAsStateWithLifecycle()
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner, vm) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) vm.syncConnection() }
+        owner.lifecycle.addObserver(observer); vm.syncConnection()
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    if (!state.loggedIn) {
+        LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login)
+        return
+    }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val nav = rememberNavController()
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route ?: "home"
+    val destinations = listOf(Destination("home", "Главная", Icons.Rounded.Home),
+        Destination("library", "Библиотека", Icons.Rounded.LibraryMusic),
+        Destination("playlists", "Плейлисты", Icons.AutoMirrored.Rounded.QueueMusic),
+        Destination("profile", "Профиль", Icons.Rounded.Person))
+    val isDetail = route == "now" || route == "lyrics" || route == "favorites" || route.startsWith("playlist/") || route.startsWith("pick/")
+    var addTrackId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val snack = remember { SnackbarHostState() }
+    LaunchedEffect(state.message) {
+        state.message?.let { snack.showSnackbar(it); vm.dismissMessage() }
+    }
+    fun mainRoute(target: String) {
+        nav.navigate(target) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true; restoreState = true
+        }
+    }
+    fun openNow() { nav.navigate("now") { launchSingleTop = true } }
+    val title = when {
+        route == "now" -> "Сейчас играет"
+        route == "lyrics" -> "Текст песни"
+        route == "favorites" -> "Избранное"
+        route.startsWith("pick/") -> "Добавить треки"
+        route.startsWith("playlist/") -> "Плейлист"
+        else -> destinations.firstOrNull { it.route == route }?.label ?: "Sirin Music"
+    }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wide = maxWidth >= 600.dp
+        Row(Modifier.fillMaxSize()) {
+            if (wide && !isDetail) NavigationRail {
+                destinations.forEach { destination ->
+                    NavigationRailItem(selected = route == destination.route, onClick = { mainRoute(destination.route) },
+                        icon = { Icon(destination.icon, null) }, label = { Text(destination.label) })
+                }
+            }
+            Scaffold(modifier = Modifier.weight(1f), snackbarHost = { SnackbarHost(snack) },
+                topBar = { TopAppBar(title = { Text(title) }, navigationIcon = {
+                    if (isDetail) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") }
+                }, actions = {
+                    if (!isDetail) IconButton(onClick = { context.startActivity(Intent(context, SettingsActivity::class.java)) }) {
+                        Icon(Icons.Rounded.Settings, "Настройки")
+                    }
+                }) },
+                bottomBar = {
+                    if (!isDetail) Column {
+                        MiniPlayer(player, vm::artworkUrl, ::openNow, vm.playback::togglePlay, { vm.playback.skip() })
+                        if (!wide) NavigationBar {
+                            destinations.forEach { destination ->
+                                NavigationBarItem(selected = route == destination.route, onClick = { mainRoute(destination.route) },
+                                    icon = { Icon(destination.icon, null) }, label = { Text(destination.label) })
+                            }
+                        }
+                    }
+                }) { padding ->
+                NavHost(navController = nav, startDestination = "home") {
+                    composable("home") {
+                        HomeScreen(state.mixes, state.favorites, player.maturity, vm::artworkUrl,
+                            { vm.playback.startRadio() }, { vm.playback.playMix(it) }, { vm.playback.playTrack(it) }, padding,
+                            onFavorites = { nav.navigate("favorites") })
+                    }
+                    composable("library") {
+                        LibraryScreen(state, player, vm::artworkUrl, { vm.playback.playTrack(it) },
+                            { vm.playback.playArtist(it) }, { a, al -> vm.playback.playAlbum(a, al) }, vm::toggleFavorite,
+                            vm::toggleArtistFavorite, vm::toggleAlbumFavorite, vm.playback::rate, { addTrackId = it }, padding)
+                    }
+                    composable("favorites") {
+                        LibraryScreen(state, player, vm::artworkUrl, { vm.playback.playTrack(it) },
+                            { vm.playback.playArtist(it) }, { a, al -> vm.playback.playAlbum(a, al) }, vm::toggleFavorite,
+                            vm::toggleArtistFavorite, vm::toggleAlbumFavorite, vm.playback::rate, { addTrackId = it }, padding, favoritesOnly = true)
+                    }
+                    composable("playlists") {
+                        PlaylistsScreen(state, vm::artworkUrl, { nav.navigate("playlist/$it") }, vm::createPlaylist, vm::loadPlaylists, padding)
+                    }
+                    composable("playlist/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments!!.getLong("id")
+                        LaunchedEffect(id) { vm.openPlaylist(id) }
+                        DisposableEffect(id) { onDispose { vm.closePlaylist() } }
+                        PlaylistDetailScreen(state, vm::artworkUrl, vm.playback::playPlaylist, vm::editPlaylist, vm::deletePlaylist,
+                            vm::removeFromPlaylist, vm::movePlaylistItem, { nav.navigate("pick/$id") }, { vm.openPlaylist(id) }, padding)
+                        LaunchedEffect(state.playlist, state.playlists, state.busy) {
+                            if (!state.playlistLoading && state.playlist == null && "playlist-mutation" !in state.busy &&
+                                state.playlists.none { it.id == id }) nav.popBackStack()
+                        }
+                    }
+                    composable("pick/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { stack ->
+                        val id = stack.arguments!!.getLong("id")
+                        LibraryScreen(state, player, vm::artworkUrl, { vm.addToPlaylist(id, it) },
+                            { }, { _, _ -> }, vm::toggleFavorite, vm::toggleArtistFavorite, vm::toggleAlbumFavorite,
+                            vm.playback::rate, { vm.addToPlaylist(id, it) }, padding, selectionMode = true)
+                    }
+                    composable("now") {
+                        NowPlayingScreen(player, vm::artworkUrl, vm.playback::togglePlay, { vm.playback.skip() },
+                            vm.playback::dislike, { player.current?.let { vm.toggleFavorite(it.key) } }, vm.playback::seekTo,
+                            { id, index -> if (player.fixed) vm.playback.jumpToIndex(index) else vm.playback.jumpTo(id) }, padding, onLike = vm.playback::like,
+                            onLyrics = { nav.navigate("lyrics") }, onAddToPlaylist = { addTrackId = player.current?.key },
+                            favoriteBusy = player.current?.let { "favorite:${it.key}" in state.busy } == true,
+                            onPrevious = { vm.playback.previous() })
+                    }
+                    composable("lyrics") { LyricsScreen(app.api, player, vm.playback::seekTo, padding) }
+                    composable("profile") {
+                        ProfileScreen(vm.savedUrl, state.serverTracks, state.serverVersion, player.maturity, state.profile,
+                            state.favorites.size, vm::refreshAll, { vm.logout() }, padding,
+                            onSettings = { context.startActivity(Intent(context, SettingsActivity::class.java)) },
+                            onAbout = { context.startActivity(Intent(context, AboutActivity::class.java)) },
+                            onFavorites = { nav.navigate("favorites") })
+                    }
+                }
+            }
+        }
+    }
+    if (addTrackId != null) AddToPlaylistSheet(state.playlists, "playlist-mutation" in state.busy,
+        onSelect = { id -> addTrackId?.let { vm.addToPlaylist(id, it) }; addTrackId = null },
+        onCreate = { addTrackId = null; mainRoute("playlists") }, onDismiss = { addTrackId = null })
+}

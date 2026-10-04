@@ -1,0 +1,24 @@
+name: Android environment
+description: JDKs, verified Gradle wrapper and Android SDK for Sirin Music
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: |
+          17
+          21
+    - uses: gradle/actions/setup-gradle@v6
+    - name: Подготовить Android SDK
+      uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+      with:
+        log-accepted-android-sdk-licenses: 'false'
+    - name: Install Android SDK packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        set +o pipefail
+        yes | sdkmanager --licenses > /dev/null
+        set -o pipefail
+        sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0"

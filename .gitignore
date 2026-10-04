@@ -1,0 +1,38 @@
+# Результаты сборки Gradle, Kotlin и Android
+.gradle/
+.kotlin/
+**/build/
+.externalNativeBuild/
+.cxx/
+*.hprof
+
+# Локальные настройки IDE и Android SDK
+.idea/
+*.iml
+local.properties
+/captures/
+
+# Секреты и ключи подписи
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+signing.properties
+
+# Установочные пакеты и локальные файлы релиза
+*.apk
+*.aab
+*.apks
+*.dex
+/release-files/
+
+# Локальные логи и служебные файлы ОС
+*.log
+.DS_Store
+Thumbs.db

@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -45,7 +44,7 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
     private val _state = MutableStateFlow(AppState(loggedIn = settings.isConfigured))
     val state = _state.asStateFlow()
     private val favoritesMutex = Mutex()
-    private val jobs = mutableMapOf<String, Job>()
+    private val jobs = TaskJobs(viewModelScope)
     private var connection = settings.baseUrl to settings.token
     private var selectedPlaylistId: Long? = null
     val savedUrl get() = settings.baseUrl
@@ -63,15 +62,14 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
     }
 
     private fun task(key: String, block: suspend () -> Unit) {
-        jobs[key]?.cancel()
-        jobs[key] = viewModelScope.launch {
+        jobs.launch(key) {
             try { block() }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { _state.update { it.copy(message = e.message ?: "Не удалось выполнить запрос") } }
         }
     }
 
-    private fun cancelTasks() { jobs.values.forEach { it.cancel() }; jobs.clear() }
+    private fun cancelTasks() = jobs.cancelAll()
 
     fun syncConnection() {
         val current = settings.baseUrl to settings.token
@@ -155,7 +153,7 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
             finally { if (selectedPlaylistId == id) _state.update { it.copy(playlistLoading = false) } }
         }
     }
-    fun closePlaylist() { selectedPlaylistId = null; jobs["playlist"]?.cancel(); _state.update { it.copy(playlist = null, playlistLoading = false) } }
+    fun closePlaylist() { selectedPlaylistId = null; jobs.cancel("playlist"); _state.update { it.copy(playlist = null, playlistLoading = false) } }
     fun createPlaylist(name: String, description: String) = mutation("playlist-mutation") {
         require(name.isNotBlank()) { "Введи название" }; api.createPlaylist(name.trim(), description.trim()); refreshPlaylists()
     }

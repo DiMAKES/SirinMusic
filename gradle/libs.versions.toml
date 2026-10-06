@@ -18,8 +18,10 @@ appcompat = "1.8.0"
 material = "1.14.0"
 
 materialKolor = "5.0.1"
+workManager = "2.12.0"
 
 [libraries]
+androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "workManager" }
 material-color-utilities = { module = "com.materialkolor:material-color-utilities", version.ref = "materialKolor" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

@@ -38,7 +38,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
   dev-apk:
-    if: github.event_name == 'push' && github.ref == 'refs/tags/1.5-dev'
+    if: github.repository == 'fenixvd/SirinMusic' && github.event_name == 'push' && (github.ref == 'refs/tags/1.5-dev' || github.ref == 'refs/heads/dev')
     needs: check-and-build
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -66,16 +66,14 @@ jobs:
           SIRIN_KEYSTORE_PASSWORD: ${{ secrets.SIRIN_KEYSTORE_PASSWORD }}
           SIRIN_KEY_ALIAS: ${{ secrets.SIRIN_KEY_ALIAS }}
           SIRIN_KEY_PASSWORD: ${{ secrets.SIRIN_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+        run: ./gradlew --no-daemon :app:lintRelease :app:assembleRelease
       - name: Verify signature and prepare dev files
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           apk=app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose "$apk"
           mkdir -p dev-files
-          cp "$apk" "dev-files/SirinMusic-${RELEASE_TAG}.apk"
+          cp "$apk" "dev-files/SirinMusic-${SIRIN_VERSION_NAME}.apk"
           (cd dev-files && sha256sum ./*.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v7
         with:

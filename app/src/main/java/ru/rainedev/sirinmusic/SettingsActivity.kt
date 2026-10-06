@@ -110,6 +110,9 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
             }, modifier = Modifier.padding(top = 12.dp)) { Text(if (clearing) "Очищаю…" else "Очистить кеш") }
 
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            Text("Обновления", style = MaterialTheme.typography.titleLarge)
+            OutlinedButton(onClick = { appContextStartUpdates(app) }) { Text("Проверить новую версию") }
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
             Text("Подключение", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(url, { url = it; error = null }, label = { Text("Адрес сервера") }, singleLine = true,
                 enabled = !checking, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -142,4 +145,8 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
         }
     }
     }
+}
+
+private fun appContextStartUpdates(app: SirinApp) {
+    app.startActivity(android.content.Intent(app, UpdatesActivity::class.java).putExtra("check_updates", true).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
 }

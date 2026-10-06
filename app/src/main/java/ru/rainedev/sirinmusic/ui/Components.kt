@@ -23,7 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImage
 
 /** Обложка трека. Размер просим у сервера параметром w, а не масштабируем 640 в списке. */
 @Composable
@@ -38,16 +38,13 @@ fun Artwork(
         shape = RoundedCornerShape(corner),
         color = MaterialTheme.colorScheme.surfaceVariant,
     ) {
-        if (url == null) {
+        Box(Modifier.fillMaxSize()) {
             Placeholder()
-        } else {
-            SubcomposeAsyncImage(
+            if (url != null) AsyncImage(
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
-                loading = { Placeholder() },
-                error = { Placeholder() },
             )
         }
     }

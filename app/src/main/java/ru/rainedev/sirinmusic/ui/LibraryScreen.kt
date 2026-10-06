@@ -11,10 +11,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ru.rainedev.sirinmusic.AppState
-import ru.rainedev.sirinmusic.playback.PlayerUi
+import ru.rainedev.sirinmusic.data.filterLibrary
+import ru.rainedev.sirinmusic.data.trackMatches
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
-fun LibraryScreen(state: AppState, player: PlayerUi, artworkUrl: (String?, Int) -> String?,
+fun LibraryScreen(state: AppState, ratings: Map<Long, String>, ratingPending: Set<Long>, hasSession: Boolean, artworkUrl: (String?, Int) -> String?,
     onTrack: (Long) -> Unit, onArtist: (String) -> Unit, onAlbum: (String, String) -> Unit,
     onFavorite: (Long) -> Unit, onArtistFavorite: (String) -> Unit, onAlbumFavorite: (String, String) -> Unit,
     onRate: (Long, String) -> Unit, onAddToPlaylist: (Long) -> Unit, contentPadding: PaddingValues,
@@ -26,10 +30,27 @@ fun LibraryScreen(state: AppState, player: PlayerUi, artworkUrl: (String?, Int) 
     val artists = if (favoritesFilter) state.favoriteArtistRows else state.artists
     val albums = if (favoritesFilter) state.favoriteAlbumRows else state.albums
     val favoriteIds = remember(state.favorites) { state.favorites.map { it.key }.toSet() }
-    val needle = query.trim().lowercase()
-    val shownTracks = remember(tracks, needle) { tracks.filter { needle.isEmpty() || listOfNotNull(it.title, it.artist, it.album).any { v -> v.lowercase().contains(needle) } } }
-    val shownArtists = remember(artists, needle) { artists.filter { it.artist.lowercase().contains(needle) } }
-    val shownAlbums = remember(albums, needle) { albums.filter { it.album.lowercase().contains(needle) || it.artist.lowercase().contains(needle) } }
+    val needle = query.trim()
+    // Только открытая вкладка; быстрый ввод отменяет предыдущий поиск.
+    val shownTracks by produceState(initialValue = tracks, tracks, needle, tab) {
+        value = if (tab != 0) emptyList() else if (needle.isEmpty()) tracks else {
+            delay(200)
+            withContext(Dispatchers.Default) { filterLibrary(tracks, needle, ::trackMatches) }
+        }
+    }
+    val shownArtists by produceState(initialValue = artists, artists, needle, tab) {
+        value = if (tab != 1) emptyList() else if (needle.isEmpty()) artists else {
+            delay(200)
+            withContext(Dispatchers.Default) { filterLibrary(artists, needle) { item, q -> item.artist.contains(q, ignoreCase = true) } }
+        }
+    }
+    val shownAlbums by produceState(initialValue = albums, albums, needle, tab) {
+        value = if (tab != 2) emptyList() else if (needle.isEmpty()) albums else {
+            delay(200)
+            withContext(Dispatchers.Default) { filterLibrary(albums, needle) { item, q ->
+                item.album.contains(q, ignoreCase = true) || item.artist.contains(q, ignoreCase = true) } }
+        }
+    }
     Column(Modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
         OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Поиск по библиотеке") },
             singleLine = true, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp))
@@ -47,8 +68,8 @@ fun LibraryScreen(state: AppState, player: PlayerUi, artworkUrl: (String?, Int) 
             if (empty && !state.libraryLoading) item(span = { GridItemSpan(maxLineSpan) }) { EmptyState(if (favoritesFilter) "В избранном пока пусто" else "Ничего не найдено", "Измени поиск или обнови библиотеку в профиле.") }
             when (tab) {
                 0 -> items(shownTracks, key = { it.key }, span = { GridItemSpan(maxLineSpan) }) { t ->
-                    TrackRow(t, artworkUrl, t.key in favoriteIds, player.ratings[t.key], "favorite:${t.key}" in state.busy,
-                        player.sessionId != null && t.key !in player.ratingPending,
+                    TrackRow(t, artworkUrl, t.key in favoriteIds, ratings[t.key], "favorite:${t.key}" in state.busy,
+                        hasSession && t.key !in ratingPending,
                         { onTrack(t.key) }, { onFavorite(t.key) }, { onRate(t.key, it) }, { onAddToPlaylist(t.key) })
                 }
                 1 -> items(shownArtists, key = { it.artist }) { a ->

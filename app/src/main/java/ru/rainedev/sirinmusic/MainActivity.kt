@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
         val app = application as SirinApp
+        app.updates.checkOnLaunch()
         setContent {
             val appearance by app.settings.appearance.collectAsStateWithLifecycle()
             SirinMusicTheme(appearance) { Surface(Modifier.fillMaxSize()) { SirinContent(app) } }
@@ -122,12 +123,12 @@ private fun SirinContent(app: SirinApp) {
                             onFavorites = { nav.navigate("favorites") })
                     }
                     composable("library") {
-                        LibraryScreen(state, player, vm::artworkUrl, { vm.playback.playTrack(it) },
+                        LibraryScreen(state, player.ratings, player.ratingPending, player.sessionId != null, vm::artworkUrl, { vm.playback.playTrack(it) },
                             { vm.playback.playArtist(it) }, { a, al -> vm.playback.playAlbum(a, al) }, vm::toggleFavorite,
                             vm::toggleArtistFavorite, vm::toggleAlbumFavorite, vm.playback::rate, { addTrackId = it }, padding)
                     }
                     composable("favorites") {
-                        LibraryScreen(state, player, vm::artworkUrl, { vm.playback.playTrack(it) },
+                        LibraryScreen(state, player.ratings, player.ratingPending, player.sessionId != null, vm::artworkUrl, { vm.playback.playTrack(it) },
                             { vm.playback.playArtist(it) }, { a, al -> vm.playback.playAlbum(a, al) }, vm::toggleFavorite,
                             vm::toggleArtistFavorite, vm::toggleAlbumFavorite, vm.playback::rate, { addTrackId = it }, padding, favoritesOnly = true)
                     }
@@ -147,7 +148,7 @@ private fun SirinContent(app: SirinApp) {
                     }
                     composable("pick/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { stack ->
                         val id = stack.arguments!!.getLong("id")
-                        LibraryScreen(state, player, vm::artworkUrl, { vm.addToPlaylist(id, it) },
+                        LibraryScreen(state, player.ratings, player.ratingPending, player.sessionId != null, vm::artworkUrl, { vm.addToPlaylist(id, it) },
                             { }, { _, _ -> }, vm::toggleFavorite, vm::toggleArtistFavorite, vm::toggleAlbumFavorite,
                             vm.playback::rate, { vm.addToPlaylist(id, it) }, padding, selectionMode = true)
                     }

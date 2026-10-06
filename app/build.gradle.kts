@@ -58,6 +58,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.androidx.work.runtime)
     implementation(libs.material.color.utilities)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)

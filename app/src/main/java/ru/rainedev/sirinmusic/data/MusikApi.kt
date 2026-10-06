@@ -99,10 +99,10 @@ class MusikApi(private val settings: ConnectionSettings) {
     }
 
     private suspend inline fun <reified T> get(path: String): T =
-        json.decodeFromString(raw(path, null))
+        withContext(Dispatchers.Default) { json.decodeFromString(raw(path, null)) }
 
     private suspend inline fun <reified T> post(path: String, body: String = "{}"): T =
-        json.decodeFromString(raw(path, body))
+        withContext(Dispatchers.Default) { json.decodeFromString(raw(path, body)) }
 
     suspend fun health(): Health = get("/api/health")
 
@@ -135,10 +135,10 @@ class MusikApi(private val settings: ConnectionSettings) {
     suspend fun toggleFavorite(trackId: Long): FavoriteReply =
         post("/api/favorites/toggle", """{"type":"track","track_id":$trackId}""")
 
-    suspend fun favorites(): FavoritesReply {
+    suspend fun favorites(): FavoritesReply = withContext(Dispatchers.Default) {
         val element = json.parseToJsonElement(raw("/api/favorites", null))
         // Older installations returned a flat track array.
-        return if (element is JsonArray) FavoritesReply(tracks = json.decodeFromJsonElement<List<Track>>(element).map { FavoriteEntry(trackId = it.key, track = it) })
+        if (element is JsonArray) FavoritesReply(tracks = json.decodeFromJsonElement<List<Track>>(element).map { FavoriteEntry(trackId = it.key, track = it) })
         else json.decodeFromJsonElement(element)
     }
 
@@ -152,9 +152,10 @@ class MusikApi(private val settings: ConnectionSettings) {
     suspend fun playlist(id: Long): Playlist = get("/api/playlists/$id")
     suspend fun createPlaylist(name: String, description: String): Playlist =
         post("/api/playlists", """{"name":${quote(name)},"description":${quote(description)},"type":"manual"}""")
-    suspend fun editPlaylist(playlist: Playlist, name: String, description: String): Playlist =
+    suspend fun editPlaylist(playlist: Playlist, name: String, description: String): Playlist = withContext(Dispatchers.Default) {
         json.decodeFromString(raw("/api/playlists/${playlist.id}",
             """{"name":${quote(name)},"description":${quote(description)},"sort_mode":${quote(playlist.sortMode)},"allow_duplicates":${playlist.allowDuplicates}}""", "PATCH"))
+    }
     suspend fun deletePlaylist(id: Long) { raw("/api/playlists/$id?hard=1", null, "DELETE") }
     suspend fun addPlaylistTrack(id: Long, trackId: Long) {
         raw("/api/playlists/$id/tracks", """{"track_id":$trackId}""")

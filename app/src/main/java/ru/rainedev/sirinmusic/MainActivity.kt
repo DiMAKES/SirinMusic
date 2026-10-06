@@ -25,26 +25,43 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.navigation.compose.*
+import ru.rainedev.sirinmusic.data.ConnectLink
 import ru.rainedev.sirinmusic.ui.*
 import ru.rainedev.sirinmusic.ui.theme.SirinMusicTheme
 
 class MainActivity : ComponentActivity() {
+    // musik://connect?url=…&token=… opened from the system camera; consumed once.
+    private val pendingLink = mutableStateOf<ConnectLink?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
         val app = application as SirinApp
         app.updates.checkOnLaunch()
+        if (savedInstanceState == null) pendingLink.value = linkFrom(intent)
         setContent {
             val appearance by app.settings.appearance.collectAsStateWithLifecycle()
-            SirinMusicTheme(appearance) { Surface(Modifier.fillMaxSize()) { SirinContent(app) } }
+            SirinMusicTheme(appearance) {
+                Surface(Modifier.fillMaxSize()) {
+                    SirinContent(app, pendingLink.value) { pendingLink.value = null }
+                }
+            }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        linkFrom(intent)?.let { pendingLink.value = it }
+    }
+
+    private fun linkFrom(intent: Intent?): ConnectLink? =
+        intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString?.let(ConnectLink::parse)
 }
 
 private data class Destination(val route: String, val label: String, val icon: ImageVector)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SirinContent(app: SirinApp) {
+private fun SirinContent(app: SirinApp, pendingLink: ConnectLink?, onLinkConsumed: () -> Unit) {
     val vm: AppViewModel = viewModel(factory = AppViewModel.Factory(app))
     val state by vm.state.collectAsStateWithLifecycle()
     val player by vm.playback.ui.collectAsStateWithLifecycle()
@@ -55,8 +72,14 @@ private fun SirinContent(app: SirinApp) {
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     if (!state.loggedIn) {
-        LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login)
+        LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login, pendingLink, onLinkConsumed)
         return
+    }
+    LaunchedEffect(pendingLink) {
+        if (pendingLink != null) {
+            vm.showMessage("Уже подключено к серверу. Чтобы подключить другой, выйди в профиле.")
+            onLinkConsumed()
+        }
     }
     val context = androidx.compose.ui.platform.LocalContext.current
     val nav = rememberNavController()

@@ -105,6 +105,7 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
     }
 
     fun dismissMessage() { _state.update { it.copy(message = null) } }
+    fun showMessage(text: String) { _state.update { it.copy(message = text) } }
     fun refreshAll() { loadMixes(); loadLibrary(); loadProfile(); loadFavorites(); loadPlaylists() }
     fun loadMixes() = task("mixes") { val r = api.mixes(); _state.update { it.copy(mixes = r.mixes, hint = r.hint) } }
     fun loadLibrary() = task("library") {

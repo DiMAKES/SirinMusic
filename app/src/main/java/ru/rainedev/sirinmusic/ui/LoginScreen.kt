@@ -1,5 +1,6 @@
 package ru.rainedev.sirinmusic.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -13,12 +14,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,6 +36,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
+import ru.rainedev.sirinmusic.data.ConnectLink
 
 @Composable
 fun LoginScreen(
@@ -35,9 +47,35 @@ fun LoginScreen(
     checking: Boolean,
     error: String?,
     onSubmit: (String, String) -> Unit,
+    pendingLink: ConnectLink? = null,
+    onLinkConsumed: () -> Unit = {},
 ) {
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken) }
+    var scanHint by remember { mutableStateOf<String?>(null) }
+
+    // A scanned QR (or a musik:// link) fills the form; with a token it signs in at once.
+    fun useLink(link: ConnectLink) {
+        url = link.baseUrl
+        val linkToken = link.token
+        if (linkToken != null) {
+            token = linkToken
+            scanHint = null
+            onSubmit(link.baseUrl, linkToken)
+        } else {
+            scanHint = "В QR-коде только адрес сервера — введи API-токен."
+        }
+    }
+
+    LaunchedEffect(pendingLink) {
+        pendingLink?.let { useLink(it); onLinkConsumed() }
+    }
+
+    val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val raw = result.contents ?: return@rememberLauncherForActivityResult // closed without a code
+        val link = ConnectLink.parse(raw)
+        if (link == null) scanHint = "Это не QR-код musik" else useLink(link)
+    }
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
     Column(
@@ -56,6 +94,32 @@ fun LoginScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 24.dp),
+        )
+
+        OutlinedButton(
+            onClick = {
+                scanner.launch(
+                    ScanOptions()
+                        .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                        .setPrompt("Наведи камеру на QR-код: веб-интерфейс musik → Профиль → Настройки")
+                        .setBeepEnabled(false)
+                        .setOrientationLocked(false)
+                )
+            },
+            enabled = !checking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Rounded.QrCodeScanner, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Сканировать QR-код")
+        }
+        Text(
+            scanHint ?: "Или введи данные вручную:",
+            color = if (scanHint != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 8.dp),
         )
 
         OutlinedTextField(

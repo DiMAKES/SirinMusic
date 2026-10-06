@@ -43,6 +43,8 @@ data class AppState(
 class AppViewModel(private val settings: Settings, private val api: MusikApi, val playback: PlaybackController) : ViewModel() {
     private val _state = MutableStateFlow(AppState(loggedIn = settings.isConfigured))
     val state = _state.asStateFlow()
+    /** musik://connect link from the system camera; kept here to survive Activity recreation. */
+    val pendingLink = PendingLink()
     private val favoritesMutex = Mutex()
     private val jobs = TaskJobs(viewModelScope)
     private var connection = settings.baseUrl to settings.token

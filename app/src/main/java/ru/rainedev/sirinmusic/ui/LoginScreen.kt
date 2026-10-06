@@ -48,27 +48,29 @@ fun LoginScreen(
     error: String?,
     onSubmit: (String, String) -> Unit,
     pendingLink: ConnectLink? = null,
-    onLinkConsumed: () -> Unit = {},
+    consumeLink: () -> ConnectLink? = { null },
 ) {
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken) }
     var scanHint by remember { mutableStateOf<String?>(null) }
 
-    // A scanned QR (or a musik:// link) fills the form; with a token it signs in at once.
+    // A scanned QR (or a musik:// link) replaces both fields; see LoginForm.withLink.
     fun useLink(link: ConnectLink) {
-        url = link.baseUrl
-        val linkToken = link.token
-        if (linkToken != null) {
-            token = linkToken
+        val next = LoginForm(url, token).withLink(link)
+        url = next.form.url
+        token = next.form.token
+        if (next.signIn) {
             scanHint = null
-            onSubmit(link.baseUrl, linkToken)
+            onSubmit(next.form.url, next.form.token)
         } else {
             scanHint = "В QR-коде только адрес сервера — введи API-токен."
         }
     }
 
+    // Taken out of the ViewModel before use, so a screen recreated afterwards
+    // does not sign in a second time.
     LaunchedEffect(pendingLink) {
-        pendingLink?.let { useLink(it); onLinkConsumed() }
+        if (pendingLink != null) consumeLink()?.let(::useLink)
     }
 
     val scanner = rememberLauncherForActivityResult(ScanContract()) { result ->

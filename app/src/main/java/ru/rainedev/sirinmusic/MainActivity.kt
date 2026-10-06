@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -30,27 +31,26 @@ import ru.rainedev.sirinmusic.ui.*
 import ru.rainedev.sirinmusic.ui.theme.SirinMusicTheme
 
 class MainActivity : ComponentActivity() {
-    // musik://connect?url=…&token=… opened from the system camera; consumed once.
-    private val pendingLink = mutableStateOf<ConnectLink?>(null)
+    // Same instance as viewModel() in SirinContent (same owner and default key).
+    private val vm: AppViewModel by viewModels { AppViewModel.Factory(application as SirinApp) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
         val app = application as SirinApp
         app.updates.checkOnLaunch()
-        if (savedInstanceState == null) pendingLink.value = linkFrom(intent)
+        // musik://connect?url=…&token=… from the system camera. After recreation the Intent
+        // is the same one: an unused link is still in the ViewModel, a used one must not
+        // come back, so the Intent is read only on the first creation.
+        if (savedInstanceState == null) linkFrom(intent)?.let(vm.pendingLink::offer)
         setContent {
             val appearance by app.settings.appearance.collectAsStateWithLifecycle()
-            SirinMusicTheme(appearance) {
-                Surface(Modifier.fillMaxSize()) {
-                    SirinContent(app, pendingLink.value) { pendingLink.value = null }
-                }
-            }
+            SirinMusicTheme(appearance) { Surface(Modifier.fillMaxSize()) { SirinContent(app) } }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        linkFrom(intent)?.let { pendingLink.value = it }
+        linkFrom(intent)?.let(vm.pendingLink::offer)
     }
 
     private fun linkFrom(intent: Intent?): ConnectLink? =
@@ -61,9 +61,10 @@ private data class Destination(val route: String, val label: String, val icon: I
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SirinContent(app: SirinApp, pendingLink: ConnectLink?, onLinkConsumed: () -> Unit) {
+private fun SirinContent(app: SirinApp) {
     val vm: AppViewModel = viewModel(factory = AppViewModel.Factory(app))
     val state by vm.state.collectAsStateWithLifecycle()
+    val pendingLink by vm.pendingLink.value.collectAsStateWithLifecycle()
     val player by vm.playback.ui.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, vm) {
@@ -72,13 +73,13 @@ private fun SirinContent(app: SirinApp, pendingLink: ConnectLink?, onLinkConsume
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     if (!state.loggedIn) {
-        LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login, pendingLink, onLinkConsumed)
+        LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login,
+            pendingLink, vm.pendingLink::consume)
         return
     }
     LaunchedEffect(pendingLink) {
-        if (pendingLink != null) {
+        if (pendingLink != null && vm.pendingLink.consume() != null) {
             vm.showMessage("Уже подключено к серверу. Чтобы подключить другой, выйди в профиле.")
-            onLinkConsumed()
         }
     }
     val context = androidx.compose.ui.platform.LocalContext.current

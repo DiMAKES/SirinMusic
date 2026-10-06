@@ -31,4 +31,51 @@ class PendingLinkTest {
         pending.offer(link)
         assertEquals(link, pending.consume())
     }
+
+    // Process death: a new ViewModel, the same launch Intent, and the saved marker.
+
+    @Test fun unusedLinkIsRestoredFromTheIntentAfterProcessDeath() {
+        val before = PendingLink()
+        before.offer(link)
+        val saved = before.marker()
+        val after = PendingLink()
+        after.restore(link, saved)
+        assertEquals(link, after.consume())
+    }
+
+    @Test fun usedLinkIsNotRestoredAfterProcessDeath() {
+        val before = PendingLink()
+        before.offer(link)
+        before.consume()
+        val saved = before.marker()
+        assertNull(saved)
+        val after = PendingLink()
+        after.restore(link, saved)
+        assertNull(after.consume())
+    }
+
+    @Test fun launchIntentIsNotRestoredWhenAnotherLinkWasPending() {
+        val before = PendingLink()
+        before.offer(ConnectLink("http://a.local:8787", "t-a")) // launch Intent, used
+        before.consume()
+        before.offer(link) // from onNewIntent, not in the restored Intent
+        val after = PendingLink()
+        after.restore(ConnectLink("http://a.local:8787", "t-a"), before.marker())
+        assertNull(after.consume())
+    }
+
+    @Test fun restoreKeepsALinkThatIsAlreadyThere() {
+        val pending = PendingLink()
+        pending.offer(link)
+        val newer = ConnectLink("http://c.local:8787", "t-c")
+        pending.offer(newer)
+        pending.restore(link, PendingLink.markerOf(link))
+        assertEquals(newer, pending.consume())
+    }
+
+    @Test fun markerDoesNotCarryTheToken() {
+        val marker = PendingLink.markerOf(ConnectLink("http://b.local:8787", "secret-token"))
+        assertFalse(marker.contains("secret-token"))
+        assertNotEquals(marker, PendingLink.markerOf(ConnectLink("http://b.local:8787", "other-token")))
+    }
 }

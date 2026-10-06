@@ -39,9 +39,10 @@ class MainActivity : ComponentActivity() {
         val app = application as SirinApp
         app.updates.checkOnLaunch()
         // musik://connect?url=…&token=… from the system camera. After recreation the Intent
-        // is the same one: an unused link is still in the ViewModel, a used one must not
-        // come back, so the Intent is read only on the first creation.
+        // is the same one: an unused link is still in the ViewModel (or, after process
+        // death, restored from the Intent by its saved marker); a used one must not come back.
         if (savedInstanceState == null) linkFrom(intent)?.let(vm.pendingLink::offer)
+        else vm.pendingLink.restore(linkFrom(intent), savedInstanceState.getString(KEY_PENDING_LINK))
         setContent {
             val appearance by app.settings.appearance.collectAsStateWithLifecycle()
             SirinMusicTheme(appearance) { Surface(Modifier.fillMaxSize()) { SirinContent(app) } }
@@ -53,8 +54,17 @@ class MainActivity : ComponentActivity() {
         linkFrom(intent)?.let(vm.pendingLink::offer)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        vm.pendingLink.marker()?.let { outState.putString(KEY_PENDING_LINK, it) }
+    }
+
     private fun linkFrom(intent: Intent?): ConnectLink? =
         intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString?.let(ConnectLink::parse)
+
+    private companion object {
+        const val KEY_PENDING_LINK = "pending_link_marker"
+    }
 }
 
 private data class Destination(val route: String, val label: String, val icon: ImageVector)

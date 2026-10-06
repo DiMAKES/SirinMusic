@@ -1,8 +1,10 @@
 package ru.rainedev.sirinmusic.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,11 +42,11 @@ fun LibraryScreen(state: AppState, player: PlayerUi, artworkUrl: (String?, Int) 
             }
         }
         if (state.libraryLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn(contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding())) {
+        LazyVerticalGrid(columns = GridCells.Adaptive(360.dp), modifier = Modifier.weight(1f), contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding())) {
             val empty = when(tab) { 0 -> shownTracks.isEmpty(); 1 -> shownArtists.isEmpty(); else -> shownAlbums.isEmpty() }
-            if (empty && !state.libraryLoading) item { EmptyState(if (favoritesFilter) "В избранном пока пусто" else "Ничего не найдено", "Измени поиск или обнови библиотеку в профиле.") }
+            if (empty && !state.libraryLoading) item(span = { GridItemSpan(maxLineSpan) }) { EmptyState(if (favoritesFilter) "В избранном пока пусто" else "Ничего не найдено", "Измени поиск или обнови библиотеку в профиле.") }
             when (tab) {
-                0 -> items(shownTracks, key = { it.key }) { t ->
+                0 -> items(shownTracks, key = { it.key }, span = { GridItemSpan(maxLineSpan) }) { t ->
                     TrackRow(t, artworkUrl, t.key in favoriteIds, player.ratings[t.key], "favorite:${t.key}" in state.busy,
                         player.sessionId != null && t.key !in player.ratingPending,
                         { onTrack(t.key) }, { onFavorite(t.key) }, { onRate(t.key, it) }, { onAddToPlaylist(t.key) })

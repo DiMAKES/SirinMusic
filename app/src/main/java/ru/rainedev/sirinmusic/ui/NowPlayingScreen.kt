@@ -1,5 +1,8 @@
 package ru.rainedev.sirinmusic.ui
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,12 +57,7 @@ fun NowPlayingScreen(
     onPrevious: () -> Unit,
 ) {
     val track = ui.current
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = contentPadding,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        item {
+    val controls: @Composable () -> Unit = {
             Column(
                 Modifier.fillMaxWidth().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -137,8 +135,8 @@ fun NowPlayingScreen(
                     )
                 }
             }
-        }
-
+    }
+    val queue: androidx.compose.foundation.lazy.LazyListScope.() -> Unit = {
         if (ui.queue.isNotEmpty()) {
             item { SectionTitle(if (ui.fixed) "Треки плейлиста" else "Дальше в очереди") }
             itemsIndexed(ui.queue, key = { index, t -> "$index:${t.key}" }) { index, t ->
@@ -148,6 +146,22 @@ fun NowPlayingScreen(
                     subtitle = listOfNotNull(t.artist, t.explanation).joinToString(" · "),
                     onClick = { onJump(t.key, t.position ?: index) },
                 )
+            }
+        }
+        if (ui.queue.isEmpty()) item { Text("Очередь пуста", Modifier.padding(24.dp)) }
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().padding(contentPadding)) {
+        if (maxWidth >= 840.dp) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    controls()
+                }
+                LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(vertical = 24.dp), content = queue)
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+                item { controls() }
+                queue()
             }
         }
     }

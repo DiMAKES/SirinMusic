@@ -8,17 +8,47 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import ru.rainedev.sirinmusic.data.*
 
-private fun paletteColors(palette: Palette, dark: Boolean): ColorScheme {
-    val (light, night, container) = when (palette) {
-        Palette.SIRIN -> Triple(0xFF9B4220, 0xFFFFB695, 0xFFFFDBCF)
-        Palette.FOREST -> Triple(0xFF386A20, 0xFF9CD67D, 0xFFB7F397)
-        Palette.OCEAN -> Triple(0xFF00658E, 0xFF85CFFF, 0xFFC7E7FF)
-        Palette.SUNSET -> Triple(0xFF904B40, 0xFFFFB4A5, 0xFFFFDAD2)
-    }
-    return if (dark) darkColorScheme(primary = Color(night), onPrimary = Color(0xFF201A25),
-        primaryContainer = Color(light), onPrimaryContainer = Color.White)
-    else lightColorScheme(primary = Color(light), onPrimary = Color.White,
-        primaryContainer = Color(container), onPrimaryContainer = Color(0xFF201A25))
+internal fun seedColors(seed: Int, dark: Boolean): ColorScheme {
+    val scheme = com.materialkolor.scheme.SchemeTonalSpot(
+        com.materialkolor.hct.Hct.fromInt(seed), dark, 0.0)
+    return (if (dark) darkColorScheme() else lightColorScheme()).copy(
+        primary = Color(scheme.primary),
+        onPrimary = Color(scheme.onPrimary),
+        primaryContainer = Color(scheme.primaryContainer),
+        onPrimaryContainer = Color(scheme.onPrimaryContainer),
+        inversePrimary = Color(scheme.inversePrimary),
+        secondary = Color(scheme.secondary),
+        onSecondary = Color(scheme.onSecondary),
+        secondaryContainer = Color(scheme.secondaryContainer),
+        onSecondaryContainer = Color(scheme.onSecondaryContainer),
+        tertiary = Color(scheme.tertiary),
+        onTertiary = Color(scheme.onTertiary),
+        tertiaryContainer = Color(scheme.tertiaryContainer),
+        onTertiaryContainer = Color(scheme.onTertiaryContainer),
+        background = Color(scheme.background),
+        onBackground = Color(scheme.onBackground),
+        surface = Color(scheme.surface),
+        onSurface = Color(scheme.onSurface),
+        surfaceVariant = Color(scheme.surfaceVariant),
+        onSurfaceVariant = Color(scheme.onSurfaceVariant),
+        surfaceTint = Color(scheme.surfaceTint),
+        inverseSurface = Color(scheme.inverseSurface),
+        inverseOnSurface = Color(scheme.inverseOnSurface),
+        error = Color(scheme.error),
+        onError = Color(scheme.onError),
+        errorContainer = Color(scheme.errorContainer),
+        onErrorContainer = Color(scheme.onErrorContainer),
+        outline = Color(scheme.outline),
+        outlineVariant = Color(scheme.outlineVariant),
+        scrim = Color(scheme.scrim),
+        surfaceBright = Color(scheme.surfaceBright),
+        surfaceDim = Color(scheme.surfaceDim),
+        surfaceContainer = Color(scheme.surfaceContainer),
+        surfaceContainerHigh = Color(scheme.surfaceContainerHigh),
+        surfaceContainerHighest = Color(scheme.surfaceContainerHighest),
+        surfaceContainerLow = Color(scheme.surfaceContainerLow),
+        surfaceContainerLowest = Color(scheme.surfaceContainerLowest),
+    )
 }
 
 @Composable
@@ -31,6 +61,8 @@ fun SirinMusicTheme(appearance: Appearance = Appearance(), content: @Composable 
     val context = LocalContext.current
     val colors = if (appearance.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-    } else paletteColors(appearance.palette, dark)
+    } else androidx.compose.runtime.remember(appearance.palette, appearance.customColor, dark) {
+        seedColors(if (appearance.palette == Palette.CUSTOM) appearance.customColor else appearance.palette.seed, dark)
+    }
     MaterialTheme(colorScheme = colors, content = content)
 }

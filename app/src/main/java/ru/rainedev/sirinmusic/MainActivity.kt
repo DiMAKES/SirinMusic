@@ -114,7 +114,8 @@ private fun SirinContent(app: SirinApp) {
                         }
                     }
                 }) { padding ->
-                NavHost(navController = nav, startDestination = "home") {
+                Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+                NavHost(modifier = Modifier.widthIn(max = if (route == "profile" || route == "lyrics") 760.dp else 1200.dp).fillMaxSize(), navController = nav, startDestination = "home") {
                     composable("home") {
                         HomeScreen(state.mixes, state.favorites, player.maturity, vm::artworkUrl,
                             { vm.playback.startRadio() }, { vm.playback.playMix(it) }, { vm.playback.playTrack(it) }, padding,
@@ -166,6 +167,7 @@ private fun SirinContent(app: SirinApp) {
                             onAbout = { context.startActivity(Intent(context, AboutActivity::class.java)) },
                             onFavorites = { nav.navigate("favorites") })
                     }
+                }
                 }
             }
         }

@@ -1,5 +1,10 @@
 package ru.rainedev.sirinmusic
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import ru.rainedev.sirinmusic.ui.ColorPicker
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -47,9 +52,13 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
     var reveal by remember { mutableStateOf(false) }
     var checking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var cacheBytes by remember { mutableLongStateOf(0L) }
+    var clearing by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { cacheBytes = app.imageCache.diskBytes() }
     val scope = rememberCoroutineScope()
     val snack = remember { SnackbarHostState() }
-    Scaffold(topBar = { TopAppBar(title = { Text("Настройки") }, navigationIcon = {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+    Scaffold(modifier = Modifier.widthIn(max = 840.dp).fillMaxSize(), topBar = { TopAppBar(title = { Text("Настройки") }, navigationIcon = {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Назад") }
     }) }, snackbarHost = { SnackbarHost(snack) }) { padding ->
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(padding).imePadding().padding(16.dp)) {
@@ -69,15 +78,37 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
                 enabled = Build.VERSION.SDK_INT >= 31, onCheckedChange = { app.settings.setAppearance(appearance.copy(dynamicColor = it)) }) })
             if (!appearance.dynamicColor || Build.VERSION.SDK_INT < 31) {
                 Text("Палитра", style = MaterialTheme.typography.titleMedium)
-                Palette.entries.forEach { palette ->
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        RadioButton(selected = appearance.palette == palette, onClick = { app.settings.setAppearance(appearance.copy(palette = palette)) })
-                        TextButton(onClick = { app.settings.setAppearance(appearance.copy(palette = palette)) }) {
-                            Text(when(palette) { Palette.SIRIN -> "Сирин"; Palette.FOREST -> "Лес"; Palette.OCEAN -> "Океан"; Palette.SUNSET -> "Закат" })
-                        }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Palette.entries.forEach { palette ->
+                        FilterChip(selected = appearance.palette == palette,
+                            onClick = { app.settings.setAppearance(appearance.copy(palette = palette)) },
+                            leadingIcon = { Box(Modifier.size(18.dp).background(
+                                Color(if (palette == Palette.CUSTOM) appearance.customColor else palette.seed), CircleShape)) },
+                            label = { Text(palette.label) })
                     }
                 }
+                if (appearance.palette == Palette.CUSTOM) ColorPicker(appearance.customColor) {
+                    app.settings.setAppearance(appearance.copy(customColor = it))
+                }
             }
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            Text("Хранилище", style = MaterialTheme.typography.titleLarge)
+            Text("Кеш обложек: ${android.text.format.Formatter.formatShortFileSize(app, cacheBytes)} из 64 МБ",
+                Modifier.padding(top = 12.dp))
+            Text("Музыка воспроизводится с сервера без сохранения на диск.", style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(enabled = !clearing, onClick = {
+                clearing = true
+                scope.launch {
+                    try {
+                        app.imageCache.clear()
+                        cacheBytes = app.imageCache.diskBytes()
+                        snack.showSnackbar("Кеш обложек очищен")
+                    } catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { snack.showSnackbar("Не удалось очистить кеш") }
+                    finally { clearing = false }
+                }
+            }, modifier = Modifier.padding(top = 12.dp)) { Text(if (clearing) "Очищаю…" else "Очистить кеш") }
+
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
             Text("Подключение", style = MaterialTheme.typography.titleLarge)
             OutlinedTextField(url, { url = it; error = null }, label = { Text("Адрес сервера") }, singleLine = true,
@@ -109,5 +140,6 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
                 }
             }) { Text(if (checking) "Проверяю…" else "Проверить и сохранить") }
         }
+    }
     }
 }

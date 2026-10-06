@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,9 +39,10 @@ fun LoginScreen(
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken) }
 
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .widthIn(max = 560.dp).fillMaxSize()
             .safeDrawingPadding()
             .imePadding()
             .verticalScroll(rememberScrollState())
@@ -99,5 +102,6 @@ fun LoginScreen(
             }
             Text("Проверить и войти")
         }
+    }
     }
 }

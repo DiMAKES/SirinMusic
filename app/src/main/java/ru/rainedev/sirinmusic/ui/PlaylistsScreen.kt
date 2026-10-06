@@ -1,6 +1,10 @@
 package ru.rainedev.sirinmusic.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -19,8 +23,8 @@ import ru.rainedev.sirinmusic.data.Playlist
 fun PlaylistsScreen(state: AppState, artworkUrl: (String?, Int) -> String?, onOpen: (Long) -> Unit,
     onCreate: (String, String) -> Unit, onRefresh: () -> Unit, contentPadding: PaddingValues) {
     var creating by rememberSaveable { mutableStateOf(false) }
-    LazyColumn(contentPadding = contentPadding) {
-        item {
+    LazyVerticalGrid(columns = GridCells.Adaptive(360.dp), contentPadding = contentPadding) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 Button(onClick = { creating = true }, enabled = "playlist-mutation" !in state.busy) {
                     Icon(Icons.Rounded.Add, null); Text("Создать", Modifier.padding(start = 8.dp))
@@ -28,9 +32,9 @@ fun PlaylistsScreen(state: AppState, artworkUrl: (String?, Int) -> String?, onOp
                 IconButton(onClick = onRefresh, enabled = !state.playlistsLoading) { Icon(Icons.Rounded.Refresh, "Обновить плейлисты") }
             }
         }
-        if (state.playlistsLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-        if (state.playlists.isEmpty() && !state.playlistsLoading) item { EmptyState("Плейлистов пока нет", "Создай свой и добавляй треки через меню ⋮.") }
-        items(state.playlists, key = { it.id }) { p ->
+        if (state.playlistsLoading) item(span = { GridItemSpan(maxLineSpan) }) { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+        if (state.playlists.isEmpty() && !state.playlistsLoading) item(span = { GridItemSpan(maxLineSpan) }) { EmptyState("Плейлистов пока нет", "Создай свой и добавляй треки через меню ⋮.") }
+        gridItems(state.playlists, key = { it.id }) { p ->
             RowCard(artworkUrl(p.coverArtwork ?: p.coverTrackId?.let { "/api/artwork/$it" }, 96), p.name,
                 "${p.trackCount} треков · ${when(p.type) { "smart" -> "Умный"; "generated" -> "Подборка"; else -> "Свой" }}",
                 onClick = { onOpen(p.id) })

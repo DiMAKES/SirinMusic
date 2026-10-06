@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -37,8 +40,8 @@ fun HomeScreen(
     contentPadding: PaddingValues,
     onFavorites: () -> Unit,
 ) {
-    LazyColumn(contentPadding = contentPadding) {
-        item {
+    LazyVerticalGrid(columns = GridCells.Adaptive(360.dp), contentPadding = contentPadding) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Column(Modifier.padding(16.dp)) {
                 Text("Sirin Music", style = MaterialTheme.typography.headlineMedium)
                 if (maturity != null) {
@@ -56,8 +59,8 @@ fun HomeScreen(
         }
 
         if (mixes.isNotEmpty()) {
-            item { SectionTitle("Подборки") }
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("Подборки") }
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -73,10 +76,10 @@ fun HomeScreen(
             }
         }
 
-        item { TextButton(onClick = onFavorites, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Всё избранное") } }
+        item(span = { GridItemSpan(maxLineSpan) }) { TextButton(onClick = onFavorites, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Всё избранное") } }
         if (favorites.isNotEmpty()) {
-            item { SectionTitle("Избранное") }
-            items(favorites.take(20), key = { it.key }) { track ->
+            item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("Избранное") }
+            gridItems(favorites.take(20), key = { it.key }) { track ->
                 RowCard(
                     artworkUrl = artworkUrl(track.artworkPath, 96),
                     title = track.title ?: "—",

@@ -38,13 +38,14 @@ class Settings(context: Context) : ConnectionSettings {
     private val _appearance = MutableStateFlow(Appearance(
         theme = runCatching { ThemeMode.valueOf(appearancePrefs.getString("theme", "SYSTEM")!!) }.getOrDefault(ThemeMode.SYSTEM),
         dynamicColor = appearancePrefs.getBoolean("dynamic_color", true),
+        customColor = appearancePrefs.getInt("custom_color", 0xFF6750A4.toInt()),
         palette = runCatching { Palette.valueOf(appearancePrefs.getString("palette", "SIRIN")!!) }.getOrDefault(Palette.SIRIN),
     ))
     val appearance = _appearance.asStateFlow()
 
     fun setAppearance(value: Appearance) {
         appearancePrefs.edit().putString("theme", value.theme.name)
-            .putBoolean("dynamic_color", value.dynamicColor).putString("palette", value.palette.name).apply()
+            .putInt("custom_color", value.customColor).putBoolean("dynamic_color", value.dynamicColor).putString("palette", value.palette.name).apply()
         _appearance.value = value
     }
 
@@ -71,5 +72,13 @@ class Settings(context: Context) : ConnectionSettings {
 
 
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
-enum class Palette { SIRIN, FOREST, OCEAN, SUNSET }
-data class Appearance(val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true, val palette: Palette = Palette.SIRIN)
+enum class Palette(val label: String, val seed: Int) {
+    SIRIN("Сирин", 0xFF9B4220.toInt()), FOREST("Лес", 0xFF386A20.toInt()),
+    OCEAN("Океан", 0xFF00658E.toInt()), SUNSET("Закат", 0xFF904B40.toInt()),
+    LAVENDER("Лаванда", 0xFF6750A4.toInt()), ROSE("Роза", 0xFFAD1457.toInt()),
+    TEAL("Бирюза", 0xFF006A60.toInt()), AMBER("Янтарь", 0xFF8A5800.toInt()),
+    INDIGO("Индиго", 0xFF3949AB.toInt()), GRAPHITE("Графит", 0xFF52616B.toInt()),
+    CUSTOM("Свой цвет", 0xFF6750A4.toInt())
+}
+data class Appearance(val theme: ThemeMode = ThemeMode.SYSTEM, val dynamicColor: Boolean = true,
+    val palette: Palette = Palette.SIRIN, val customColor: Int = 0xFF6750A4.toInt())

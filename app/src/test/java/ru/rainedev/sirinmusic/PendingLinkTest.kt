@@ -58,10 +58,20 @@ class PendingLinkTest {
         val before = PendingLink()
         before.offer(ConnectLink("http://a.local:8787", "t-a")) // launch Intent, used
         before.consume()
-        before.offer(link) // from onNewIntent, not in the restored Intent
+        before.offer(link) // a newer link; the restored Intent still carries the old one
         val after = PendingLink()
         after.restore(ConnectLink("http://a.local:8787", "t-a"), before.marker())
         assertNull(after.consume())
+    }
+
+    @Test fun linkFromOnNewIntentIsRestoredFromTheUpdatedIntent() {
+        val before = PendingLink()
+        before.offer(ConnectLink("http://a.local:8787", "t-a")) // launch Intent, used
+        before.consume()
+        before.offer(link) // onNewIntent, which also makes it the Activity's Intent
+        val after = PendingLink()
+        after.restore(link, before.marker())
+        assertEquals(link, after.consume())
     }
 
     @Test fun restoreKeepsALinkThatIsAlreadyThere() {

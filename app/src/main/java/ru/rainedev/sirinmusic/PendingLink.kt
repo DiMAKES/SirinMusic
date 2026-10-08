@@ -32,7 +32,8 @@ class PendingLink {
 
     /**
      * Re-offers [fromIntent] after process death when [savedMarker] says it was still
-     * unused. A link from onNewIntent is not in the restored Intent, so it is lost then.
+     * unused. MainActivity keeps a link from onNewIntent as its Intent (setIntent), so
+     * that is the link read back here; a different one never matches the marker.
      */
     fun restore(fromIntent: ConnectLink?, savedMarker: String?) {
         if (fromIntent == null || savedMarker == null) return

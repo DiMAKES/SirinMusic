@@ -51,7 +51,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        linkFrom(intent)?.let(vm.pendingLink::offer)
+        val link = linkFrom(intent) ?: return
+        // The accepted link becomes the Activity's Intent, so a recreated Activity
+        // reads this link (and matches its saved marker), not the launch one.
+        setIntent(intent)
+        vm.pendingLink.offer(link)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

@@ -124,6 +124,16 @@ class MusikApi(private val settings: ConnectionSettings) {
         return post("/api/auth/token", body)
     }
 
+    /**
+     * Creates an account from an invitation on a server with accounts. The server also
+     * opens a browser session, but this client keeps no cookies: the app then signs in
+     * with [passwordToken] and uses the device token.
+     */
+    suspend fun register(invitation: String, username: String, password: String) {
+        raw("/api/auth/register",
+            "{\"invitation\":${quote(invitation.trim())},\"username\":${quote(username.trim())},\"password\":${quote(password)}}")
+    }
+
     /** Health is public; only auth/me can validate the supplied credential. */
     suspend fun validateConnection(): Health {
         val status = authStatus()

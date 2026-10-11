@@ -7,8 +7,10 @@ import java.net.URLDecoder
  * What the "add this server" QR in the musik web UI (Profile → Settings) carries:
  * `musik://connect?url=<server base url>&token=<API token>`. The same link opens the
  * app from the system camera. A QR with a plain http(s) address only fills the address.
+ * An invitation link from a server with accounts (`https://host/?invitation=<secret>`)
+ * gives the address and the invitation for creating an account.
  */
-data class ConnectLink(val baseUrl: String, val token: String?) {
+data class ConnectLink(val baseUrl: String, val token: String?, val invitation: String? = null) {
     companion object {
         fun parse(raw: String): ConnectLink? {
             val text = raw.trim()
@@ -19,11 +21,13 @@ data class ConnectLink(val baseUrl: String, val token: String?) {
                     val query = parseQuery(uri.rawQuery)
                     val url = query["url"]?.trim()?.trimEnd('/') ?: return null
                     if (validateServerUrl(url) != null) return null
-                    ConnectLink(url, query["token"]?.trim()?.takeIf { it.isNotEmpty() })
+                    ConnectLink(url, query["token"]?.trim()?.takeIf { it.isNotEmpty() },
+                        query["invitation"]?.trim()?.takeIf { it.isNotEmpty() })
                 }
                 "http", "https" -> {
                     val url = text.substringBefore('#').substringBefore('?').trimEnd('/')
-                    if (validateServerUrl(url) != null) null else ConnectLink(url, null)
+                    val invitation = parseQuery(uri.rawQuery)["invitation"]?.trim()?.takeIf { it.isNotEmpty() }
+                    if (validateServerUrl(url) != null) null else ConnectLink(url, null, invitation)
                 }
                 else -> null
             }

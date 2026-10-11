@@ -20,6 +20,17 @@ class ConnectLinkTest {
         assertEquals(ConnectLink("http://10.0.0.2:8787", null), ConnectLink.parse("http://10.0.0.2:8787/?x=1#y"))
     }
 
+    @Test fun invitationLinkGivesAddressAndCode() {
+        // As the server builds it: PublicBaseURL + "/?invitation=" + QueryEscape(secret).
+        assertEquals(ConnectLink("https://musik.example.ru", null, "Ab-_c9"),
+            ConnectLink.parse("https://musik.example.ru/?invitation=Ab-_c9"))
+        assertEquals(ConnectLink("https://musik.example.ru", null, "a+b"),
+            ConnectLink.parse("https://musik.example.ru/?invitation=a%2Bb#x"))
+        assertEquals(ConnectLink("http://10.0.0.2:8787", null, "code"),
+            ConnectLink.parse("musik://connect?url=http%3A%2F%2F10.0.0.2%3A8787&invitation=code"))
+        assertNull(ConnectLink.parse("https://musik.example.ru/?invitation=")!!.invitation)
+    }
+
     @Test fun foreignOrBrokenCodesAreRejected() {
         listOf(
             "", "hello", "WIFI:S:home;T:WPA;P:secret;;", "musik://other?url=http%3A%2F%2Fx",

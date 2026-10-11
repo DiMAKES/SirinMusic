@@ -92,7 +92,7 @@ private fun SirinContent(app: SirinApp) {
     if (!state.loggedIn) {
         LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login,
             pendingLink, vm.pendingLink::consume,
-            onPasswordSubmit = vm::loginPassword, profiles = state.loginProfiles,
+            onPasswordSubmit = vm::loginPassword, onRegister = vm::registerWithInvitation, profiles = state.loginProfiles,
             onChooseProfile = vm::chooseLoginProfile, onCancelProfiles = vm::cancelAccountLogin,
             onAnonymousSubmit = vm::loginWithoutToken)
         return

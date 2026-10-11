@@ -52,6 +52,7 @@ class AccountActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AccountScreen(app: SirinApp, api: AccountApi?, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var me by remember { mutableStateOf<AccountMe?>(null) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -73,6 +74,7 @@ private fun AccountScreen(app: SirinApp, api: AccountApi?, onBack: () -> Unit) {
     var notice by remember { mutableStateOf<String?>(null) }
     var confirmation by remember { mutableStateOf<Pair<String, suspend () -> Unit>?>(null) }
     var qr by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var inviteQr by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var phoneUrl by remember { mutableStateOf(api?.origin.orEmpty()) }
     var revealToken by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -177,7 +179,22 @@ private fun AccountScreen(app: SirinApp, api: AccountApi?, onBack: () -> Unit) {
                     OutlinedTextField(email, { email = it }, label = { Text("Email (необязательно)") }, enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(hours, { hours = it }, label = { Text("Срок в часах") }, enabled = !busy, singleLine = true, modifier = Modifier.fillMaxWidth())
                     Button(onClick = { action { issuedInvite = api.invite(email, hours.toIntOrNull() ?: kotlin.error("Введи срок от 1 до 168 часов")); invites = api.invitations() } }, enabled = !busy) { Text("Создать приглашение") }
-                    issuedInvite?.let { invite -> Text(invite.url); TextButton(onClick = { copy(invite.url, true) }) { Text("Копировать приглашение") } }
+                    issuedInvite?.let { invite ->
+                        Text(invite.url)
+                        Text("Ссылка одноразовая: по ней человек сам придумает имя и пароль — в браузере или в приложении (\"У меня есть приглашение\").",
+                            style = MaterialTheme.typography.bodySmall)
+                        Row {
+                            TextButton(onClick = { copy(invite.url, true) }) { Text("Копировать") }
+                            TextButton(onClick = { action { inviteQr = qrBitmap(invite.url) } }, enabled = !busy) { Text("QR") }
+                            TextButton(onClick = {
+                                val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TEXT, invite.url)
+                                }
+                                context.startActivity(android.content.Intent.createChooser(send, "Отправить приглашение"))
+                            }) { Text("Поделиться") }
+                        }
+                    }
                     Text("Пользователи", style = MaterialTheme.typography.titleLarge)
                     users.forEach { user -> key(user.id, user.status, user.admin) {
                         var active by remember { mutableStateOf(user.status == "active") }; var admin by remember { mutableStateOf(user.admin) }
@@ -202,14 +219,17 @@ private fun AccountScreen(app: SirinApp, api: AccountApi?, onBack: () -> Unit) {
         }
     }
     confirmation?.let { (text, operation) -> AlertDialog(onDismissRequest = { confirmation = null }, title = { Text("Подтверждение") }, text = { Text(text) }, confirmButton = { TextButton(onClick = { confirmation = null; action { operation() } }) { Text("Подтвердить") } }, dismissButton = { TextButton(onClick = { confirmation = null }) { Text("Отмена") } }) }
+    inviteQr?.let { bitmap -> AlertDialog(onDismissRequest = { inviteQr = null }, title = { Text("Приглашение") }, text = { Column { Image(bitmap.asImageBitmap(), "QR приглашения", Modifier.fillMaxWidth().aspectRatio(1f)); Text("Отсканируй камерой или в приложении musik на экране входа.") } }, confirmButton = { TextButton(onClick = { inviteQr = null }) { Text("Закрыть") } }) }
     qr?.let { bitmap -> AlertDialog(onDismissRequest = { qr = null }, title = { Text("Подключение устройства") }, text = { Column { Text(phoneUrl); Image(bitmap.asImageBitmap(), "QR подключения", Modifier.fillMaxWidth().aspectRatio(1f)); Text("QR содержит личный токен. Передавай только своему устройству.") } }, confirmButton = { TextButton(onClick = { qr = null }) { Text("Закрыть") } }) }
 }
 
 private fun accountDate(value: String): String = runCatching {
     java.time.Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm:ss"))
 }.getOrDefault(value)
-private suspend fun createConnectionQr(url: String, token: String): android.graphics.Bitmap = withContext(Dispatchers.Default) {
-    val payload = "musik://connect?url=${java.net.URLEncoder.encode(url, "UTF-8")}&token=${java.net.URLEncoder.encode(token, "UTF-8")}"
+private suspend fun createConnectionQr(url: String, token: String): android.graphics.Bitmap =
+    qrBitmap("musik://connect?url=${java.net.URLEncoder.encode(url, "UTF-8")}&token=${java.net.URLEncoder.encode(token, "UTF-8")}")
+
+private suspend fun qrBitmap(payload: String): android.graphics.Bitmap = withContext(Dispatchers.Default) {
     val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(payload, com.google.zxing.BarcodeFormat.QR_CODE, 768, 768)
     androidx.core.graphics.createBitmap(768, 768).apply {
         setPixels(IntArray(768*768) { i -> if (matrix[i%768,i/768]) android.graphics.Color.BLACK else android.graphics.Color.WHITE },0,768,0,0,768,768)

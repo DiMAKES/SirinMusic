@@ -58,7 +58,7 @@ fun LoginScreen(
     onChooseProfile: (String) -> Unit,
     onCancelProfiles: () -> Unit,
     onAnonymousSubmit: (String) -> Unit,
-
+    onRegister: (url: String, invitation: String, username: String, password: String) -> Unit = { _, _, _, _ -> },
 ) {
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken) }
@@ -66,11 +66,31 @@ fun LoginScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var scanHint by remember { mutableStateOf<String?>(null) }
+    // Account creation from an invitation (a server with accounts).
+    var inviteMode by remember { mutableStateOf(false) }
+    var invitation by remember { mutableStateOf("") }
+    var passwordAgain by remember { mutableStateOf("") }
+    var formError by remember { mutableStateOf<String?>(null) }
+
+    // The invitation field takes the whole link (https://host/?invitation=…), which also
+    // gives the address, or the bare code with the address typed above.
+    fun invitationCode(): String = ConnectLink.parse(invitation.trim())?.invitation ?: invitation.trim()
 
     // A scanned QR (or a musik:// link) replaces both fields; see LoginForm.withLink.
     fun useLink(link: ConnectLink) {
         onCancelProfiles()
         password = ""
+        passwordAgain = ""
+        formError = null
+        if (link.invitation != null) {
+            url = link.baseUrl
+            token = ""
+            invitation = link.invitation
+            inviteMode = true
+            scanHint = null
+            return
+        }
+        inviteMode = false
         val next = LoginForm(url, token).withLink(link)
         url = next.form.url
         token = next.form.token
@@ -170,6 +190,33 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        if (inviteMode) {
+            Text("Регистрация по приглашению", style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+            OutlinedTextField(value = invitation,
+                onValueChange = { value ->
+                    invitation = value
+                    ConnectLink.parse(value.trim())?.takeIf { it.invitation != null }?.let { url = it.baseUrl }
+                },
+                label = { Text("Ссылка или код приглашения") },
+                singleLine = true, enabled = !checking,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            OutlinedTextField(value = username, onValueChange = { username = it },
+                label = { Text("Придумай имя") }, singleLine = true, enabled = !checking,
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+            OutlinedTextField(value = password, onValueChange = { password = it },
+                label = { Text("Пароль") }, supportingText = { Text("Не короче 8 символов") },
+                singleLine = true, enabled = !checking,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+            OutlinedTextField(value = passwordAgain, onValueChange = { passwordAgain = it },
+                label = { Text("Пароль ещё раз") }, singleLine = true, enabled = !checking,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+        } else {
         TextButton(onClick = { passwordMode = !passwordMode; password = ""; scanHint = null },
             enabled = !checking) {
             Text(if (passwordMode) "Войти по токену" else "Войти по паролю")
@@ -200,9 +247,17 @@ fun LoginScreen(
 
         }
         }
-        if (error != null) {
+        TextButton(onClick = {
+            inviteMode = !inviteMode; password = ""; passwordAgain = ""; formError = null; scanHint = null
+            if (inviteMode) passwordMode = true
+        }, enabled = !checking) {
+            Text(if (inviteMode) "Уже есть аккаунт — войти" else "У меня есть приглашение")
+        }
+        }
+        val shownError = formError ?: error
+        if (shownError != null) {
             Text(
-                error,
+                shownError,
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 12.dp),
@@ -211,9 +266,19 @@ fun LoginScreen(
 
         if (profiles.isEmpty()) Button(
             onClick = {
-                if (passwordMode) onPasswordSubmit(url, username, password) else onSubmit(url, token)
+                formError = null
+                when {
+                    inviteMode && password != passwordAgain -> formError = "Пароли не совпадают"
+                    inviteMode -> onRegister(url, invitationCode(), username, password)
+                    passwordMode -> onPasswordSubmit(url, username, password)
+                    else -> onSubmit(url, token)
+                }
             },
-            enabled = !checking && url.isNotBlank() && (if (passwordMode) password.isNotEmpty() else token.isNotBlank()),
+            enabled = !checking && url.isNotBlank() && when {
+                inviteMode -> invitation.isNotBlank() && username.isNotBlank() && password.isNotEmpty() && passwordAgain.isNotEmpty()
+                passwordMode -> password.isNotEmpty()
+                else -> token.isNotBlank()
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 20.dp),
@@ -221,10 +286,10 @@ fun LoginScreen(
             if (checking) {
                 CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
             }
-            Text("Проверить и войти")
+            Text(if (inviteMode) "Создать аккаунт" else "Проверить и войти")
         }
         if (profiles.isNotEmpty() && checking) CircularProgressIndicator(Modifier.padding(top = 12.dp))
-        if (profiles.isEmpty()) TextButton(onClick = { onAnonymousSubmit(url) },
+        if (profiles.isEmpty() && !inviteMode) TextButton(onClick = { onAnonymousSubmit(url) },
             enabled = !checking && url.isNotBlank()) {
             Text("Подключиться без авторизации")
         }

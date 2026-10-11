@@ -135,16 +135,7 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
         task("login") {
             _state.update { it.copy(checking = true, loginError = null) }
             try {
-                val base = url.trim().trimEnd('/')
-                val anonymous = MusikApi(ServerConnection(base, "", settings.clientId))
-                val status = anonymous.authStatus()
-                check(!status.multiUser || username.isNotBlank()) { "Введи имя пользователя" }
-                val reply = anonymous.passwordToken(username, password)
-                check(reply.token.isNotBlank()) { "Сервер не выдал токен" }
-                if (reply.profiles.size > 1) {
-                    pendingAccount = PendingAccount(base, username, password, reply)
-                    _state.update { it.copy(loginProfiles = reply.profiles) }
-                } else completeAccountLogin(base, reply)
+                signInWithPassword(url.trim().trimEnd('/'), username, password)
             } catch (e: CancellationException) { pendingAccount = null; throw e }
             catch (e: ApiException) {
                 _state.update { it.copy(loginError = when (e.code) {
@@ -156,6 +147,50 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
             } catch (e: Exception) { _state.update { it.copy(loginError = e.message) } }
             finally { _state.update { it.copy(checking = false) } }
         }
+    }
+
+    /**
+     * Creates an account from an invitation (a server with accounts), then signs in with
+     * it the same way as [loginPassword], profile choice included.
+     */
+    fun registerWithInvitation(url: String, invitation: String, username: String, password: String) {
+        cancelAccountLogin()
+        val error = validateServerUrl(url) ?: when {
+            invitation.isBlank() -> "Вставь ссылку или код приглашения"
+            username.isBlank() -> "Придумай имя пользователя"
+            password.length !in 8..256 -> "Пароль — от 8 до 256 символов"
+            else -> null
+        }
+        if (error != null) { _state.update { it.copy(loginError = error) }; return }
+        task("login") {
+            _state.update { it.copy(checking = true, loginError = null) }
+            try {
+                val base = url.trim().trimEnd('/')
+                MusikApi(ServerConnection(base, "", settings.clientId)).register(invitation, username, password)
+                signInWithPassword(base, username, password)
+            } catch (e: CancellationException) { pendingAccount = null; throw e }
+            catch (e: ApiException) {
+                _state.update { it.copy(loginError = when (e.code) {
+                    403 -> "Приглашение недействительно или имя уже занято"
+                    404 -> "Сервер не поддерживает приглашения — обнови его"
+                    400 -> "Имя — от 1 до 64 символов, пароль — от 8 до 256"
+                    else -> e.message
+                }) }
+            } catch (e: Exception) { _state.update { it.copy(loginError = e.message) } }
+            finally { _state.update { it.copy(checking = false) } }
+        }
+    }
+
+    private suspend fun signInWithPassword(base: String, username: String, password: String) {
+        val anonymous = MusikApi(ServerConnection(base, "", settings.clientId))
+        val status = anonymous.authStatus()
+        check(!status.multiUser || username.isNotBlank()) { "Введи имя пользователя" }
+        val reply = anonymous.passwordToken(username, password)
+        check(reply.token.isNotBlank()) { "Сервер не выдал токен" }
+        if (reply.profiles.size > 1) {
+            pendingAccount = PendingAccount(base, username, password, reply)
+            _state.update { it.copy(loginProfiles = reply.profiles) }
+        } else completeAccountLogin(base, reply)
     }
 
     fun chooseLoginProfile(id: String) {

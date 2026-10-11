@@ -79,6 +79,8 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
                     Text("Настрой приложение под себя", style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(bottom = 16.dp))
                     SettingsMenu(activePage, { pageName = it.name },
+                        onServer = { app.startActivity(android.content.Intent(app, ServerSettingsActivity::class.java)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) },
                         onUpdates = { app.startActivity(android.content.Intent(app, UpdatesActivity::class.java)
                             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) },
                         onAbout = { app.startActivity(android.content.Intent(app, AboutActivity::class.java)
@@ -158,7 +160,7 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
                     scope.launch {
                         try {
                             val draft = ServerConnection(url.trim().trimEnd('/'), token.trim(), app.settings.clientId)
-                            check(MusikApi(draft).health().ok) { "Сервер ответил, но не готов" }
+                            MusikApi(draft).validateConnection()
                             app.playback.stop(); app.settings.setConnection(draft.baseUrl, draft.token)
                             snack.showSnackbar("Подключение сохранено")
                         } catch (e: CancellationException) { throw e }

@@ -19,12 +19,14 @@ data class AppState(
     val loggedIn: Boolean = false,
     val checking: Boolean = false,
     val loginError: String? = null,
+    val loginProfiles: List<AccountProfile> = emptyList(),
     val serverTracks: Int = 0,
     val serverVersion: String? = null,
     val mixes: List<Mix> = emptyList(),
     val hint: String? = null,
     val tracks: List<Track> = emptyList(),
     val artists: List<ArtistRow> = emptyList(),
+    val artistPhotos: Map<String, String> = emptyMap(),
     val albums: List<AlbumRow> = emptyList(),
     val favorites: List<Track> = emptyList(),
     val favoriteArtists: Set<String> = emptySet(),
@@ -59,6 +61,9 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
     private val jobs = TaskJobs(viewModelScope)
     private var connection = settings.baseUrl to settings.token
     private var selectedPlaylistId: Long? = null
+    // Credentials exist only while choosing a profile, never in settings or saved state.
+    private class PendingAccount(val url: String, val username: String, val password: String, val reply: TokenReply)
+    private var pendingAccount: PendingAccount? = null
     val savedUrl get() = settings.baseUrl
     val savedToken get() = settings.token
 
@@ -83,6 +88,10 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
 
     private fun cancelTasks() = jobs.cancelAll()
 
+    fun refreshPausedPlayback() {
+        if (settings.isConfigured) playback.restoreIfIdle(refreshPaused = true)
+    }
+
     fun syncConnection() {
         val current = settings.baseUrl to settings.token
         if (connection == current) return
@@ -91,16 +100,21 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
         if (settings.isConfigured) refreshAll()
     }
 
-    fun login(url: String, token: String) {
-        val error = validateServerUrl(url) ?: if (token.isBlank()) "Введи токен" else null
+    fun login(url: String, token: String) = loginWithToken(url, token, false)
+
+    fun loginWithoutToken(url: String) = loginWithToken(url, "", true)
+
+    private fun loginWithToken(url: String, token: String, anonymous: Boolean) {
+        cancelAccountLogin()
+        val error = validateServerUrl(url) ?: if (!anonymous && token.isBlank()) "Введи токен" else null
         if (error != null) { _state.update { it.copy(loginError = error) }; return }
         task("login") {
             _state.update { it.copy(checking = true, loginError = null) }
             try {
                 val draft = ServerConnection(url.trim().trimEnd('/'), token.trim(), settings.clientId)
-                val health = MusikApi(draft).health()
-                check(health.ok) { "Сервер ответил, но не готов" }
-                settings.setConnection(draft.baseUrl, draft.token)
+                val client = MusikApi(draft)
+                val health = if (anonymous) client.validateAnonymousConnection() else client.validateConnection()
+                settings.setConnection(draft.baseUrl, draft.token, authDisabled = anonymous)
                 connection = settings.baseUrl to settings.token
                 _state.value = AppState(loggedIn = true, serverTracks = health.tracks, serverVersion = health.version)
                 refreshAll()
@@ -109,7 +123,70 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
         }
     }
 
+    fun cancelAccountLogin() {
+        pendingAccount = null
+        _state.update { it.copy(loginProfiles = emptyList()) }
+    }
+
+    fun loginPassword(url: String, username: String, password: String) {
+        cancelAccountLogin()
+        val error = validateServerUrl(url) ?: if (password.isEmpty()) "Введи пароль" else null
+        if (error != null) { _state.update { it.copy(loginError = error) }; return }
+        task("login") {
+            _state.update { it.copy(checking = true, loginError = null) }
+            try {
+                val base = url.trim().trimEnd('/')
+                val anonymous = MusikApi(ServerConnection(base, "", settings.clientId))
+                val status = anonymous.authStatus()
+                check(!status.multiUser || username.isNotBlank()) { "Введи имя пользователя" }
+                val reply = anonymous.passwordToken(username, password)
+                check(reply.token.isNotBlank()) { "Сервер не выдал токен" }
+                if (reply.profiles.size > 1) {
+                    pendingAccount = PendingAccount(base, username, password, reply)
+                    _state.update { it.copy(loginProfiles = reply.profiles) }
+                } else completeAccountLogin(base, reply)
+            } catch (e: CancellationException) { pendingAccount = null; throw e }
+            catch (e: ApiException) {
+                _state.update { it.copy(loginError = when (e.code) {
+                    404 -> "Сервер пока не поддерживает вход по паролю. Используй QR или токен."
+                    401 -> "Неверное имя пользователя или пароль"
+                    409 -> "На сервере не настроен токен для мобильного входа"
+                    else -> e.message
+                }) }
+            } catch (e: Exception) { _state.update { it.copy(loginError = e.message) } }
+            finally { _state.update { it.copy(checking = false) } }
+        }
+    }
+
+    fun chooseLoginProfile(id: String) {
+        val pending = pendingAccount ?: return
+        if (pending.reply.profiles.none { it.id == id }) return
+        task("login") {
+            _state.update { it.copy(checking = true, loginError = null) }
+            try {
+                val reply = if (pending.reply.device?.profileId == id) pending.reply else
+                    MusikApi(ServerConnection(pending.url, "", settings.clientId))
+                        .passwordToken(pending.username, pending.password, id)
+                check(reply.device?.profileId == id) { "Сервер выдал токен другого профиля" }
+                completeAccountLogin(pending.url, reply)
+            } catch (e: CancellationException) { pendingAccount = null; throw e }
+            catch (e: Exception) { _state.update { it.copy(loginError = e.message) } }
+            finally { _state.update { it.copy(checking = false) } }
+        }
+    }
+
+    private suspend fun completeAccountLogin(url: String, reply: TokenReply) {
+        val draft = ServerConnection(url, reply.token, settings.clientId)
+        val health = MusikApi(draft).validateConnection()
+        settings.setConnection(draft.baseUrl, draft.token)
+        pendingAccount = null
+        connection = settings.baseUrl to settings.token
+        _state.value = AppState(loggedIn = true, serverTracks = health.tracks, serverVersion = health.version)
+        refreshAll()
+    }
+
     fun logout(forgetUrl: Boolean = true) {
+        pendingAccount = null
         cancelTasks(); playback.stop()
         if (forgetUrl) settings.clear() else settings.token = ""
         connection = settings.baseUrl to settings.token; selectedPlaylistId = null
@@ -118,7 +195,19 @@ class AppViewModel(private val settings: Settings, private val api: MusikApi, va
 
     fun dismissMessage() { _state.update { it.copy(message = null) } }
     fun showMessage(text: String) { _state.update { it.copy(message = text) } }
-    fun refreshAll() { loadMixes(); loadLibrary(); loadProfile(); loadFavorites(); loadPlaylists() }
+    fun refreshAll() { playback.restoreIfIdle(); loadArtistPhotos(); loadMixes(); loadLibrary(); loadProfile(); loadFavorites(); loadPlaylists() }
+    fun loadArtistPhotos() = task("artistPhotos") {
+        try {
+            val photos = api.artistPhotos().photos.filterValues { path ->
+                path.startsWith("/api/artist-photos/") && runCatching { api.url(path) }.isSuccess
+            }
+            _state.update { it.copy(artistPhotos = photos) }
+        } catch (e: CancellationException) { throw e }
+        catch (e: ApiException) {
+            if (e.code == 404) _state.update { it.copy(artistPhotos = emptyMap()) }
+            else _state.update { it.copy(message = "Не удалось загрузить фото артистов") }
+        } catch (_: Exception) { /* Covers remain available when photos cannot be loaded. */ }
+    }
     fun loadMixes() = task("mixes") { val r = api.mixes(); _state.update { it.copy(mixes = r.mixes, hint = r.hint) } }
     fun loadLibrary() = task("library") {
         _state.update { it.copy(libraryLoading = true) }

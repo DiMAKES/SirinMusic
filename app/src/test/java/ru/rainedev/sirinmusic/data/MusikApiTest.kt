@@ -175,4 +175,143 @@ class MusikApiTest {
         assertEquals("/api/share/radio", requests.take().second)
     }
 
+    @Test fun passwordLoginUsesMobileTokenContractAndEscapesCredentials() = runBlocking {
+        body = """{"token":"device-secret","device":{"id":"d","profile_id":"p","profile_name":"Музыка"},"profiles":[{"id":"p","name":"Музыка","is_default":true}]}"""
+        val reply = api.passwordToken(" Owner ", "a\"b\\c", "p")
+        val request = requests.take()
+        assertEquals("POST", request.first)
+        assertEquals("/api/auth/token", request.second)
+        val payload = Json.parseToJsonElement(request.third).jsonObject
+        assertEquals("Owner", payload.getValue("username").jsonPrimitive.content)
+        assertEquals("a\"b\\c", payload.getValue("password").jsonPrimitive.content)
+        assertEquals("p", payload.getValue("profile_id").jsonPrimitive.content)
+        assertEquals("p", reply.device?.profileId)
+        assertTrue(reply.profiles.single().isDefault)
+        // Reply must not disclose the bearer through a generated data-class toString.
+        assertFalse(reply.toString().contains("device-secret"))
+    }
+
+    @Test fun singleOwnerPasswordDoesNotSendInventedUsernameOrProfile() = runBlocking {
+        body = """{"token":"legacy"}"""
+        assertEquals("legacy", api.passwordToken("", "password").token)
+        val payload = Json.parseToJsonElement(requests.take().third).jsonObject
+        assertFalse(payload.containsKey("username"))
+        assertFalse(payload.containsKey("profile_id"))
+    }
+
+    @Test fun publicHealthCannotMakeInvalidTokenLookAuthenticated() = runBlocking {
+        body = """{"ok":false,"auth_enabled":true}"""
+        try {
+            api.validateConnection()
+            fail("Rejected token must not be saved")
+        } catch (_: IllegalStateException) { }
+        assertEquals("/api/auth/me", requests.take().second)
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test fun connectionChecksAuthenticationBeforeHealth() = runBlocking {
+        body = """{"ok":true,"auth_enabled":true,"version":"test"}"""
+        assertTrue(api.validateConnection().ok)
+        assertEquals("/api/auth/me", requests.take().second)
+        assertEquals("/api/health", requests.take().second)
+    }
+
+    @Test fun anonymousConnectionRequiresExplicitServerPermission() = runBlocking {
+        body = """{"ok":true,"auth_enabled":true}"""
+        try { api.validateAnonymousConnection(); fail("Auth-enabled server must reject tokenless mode") }
+        catch (_: IllegalStateException) { }
+        assertEquals("/api/auth/me", requests.take().second)
+        assertTrue(requests.isEmpty())
+        body = """{"ok":true,"auth_enabled":false}"""
+        assertTrue(api.validateAnonymousConnection().ok)
+        assertEquals("/api/auth/me", requests.take().second)
+        assertEquals("/api/health", requests.take().second)
+    }
+
+    @Test fun credentialExchangeDoesNotReuseSavedBearer() = runBlocking {
+        val anonymous = MusikApi(ServerConnection("http://127.0.0.1:${server.address.port}", "", "fixture-client"))
+        body = """{"token":"new-device"}"""
+        try {
+            anonymous.passwordToken("owner", "secret")
+            assertEquals("", authorization.take())
+            assertEquals("/api/auth/token", requests.take().second)
+        } finally {
+            anonymous.client.connectionPool.evictAll()
+            anonymous.client.dispatcher.executorService.shutdown()
+        }
+    }
+
+    @Test fun playbackClaimKeepsPositionListeningAndDeviceIdentity() = runBlocking {
+        body = """{"ok":true,"state":{"session_id":"session","track_id":42,"position_sec":37.5,"listened_sec":28.0,"playing":true,"client_id":"phone"}}"""
+        val reply = api.savePlaybackState(PlaybackState("session",42,37.5,28.0,true,"phone"),true)
+        val request = requests.take()
+        assertEquals("PUT",request.first)
+        assertEquals("/api/playback/state",request.second)
+        val payload = Json.parseToJsonElement(request.third).jsonObject
+        assertEquals("true",payload.getValue("claim").jsonPrimitive.content)
+        assertEquals("phone",payload.getValue("client_id").jsonPrimitive.content)
+        assertEquals(28.0,payload.getValue("listened_sec").jsonPrimitive.content.toDouble(),0.001)
+        assertEquals(37.5,reply.state!!.positionSec,0.001)
+        assertTrue(reply.ok)
+    }
+
+    @Test fun ownershipRejectionRemainsVisibleEvenWithHttp200() = runBlocking {
+        body = """{"ok":false,"state":{"track_id":9,"client_id":"browser"}}"""
+        val reply = api.savePlaybackState(PlaybackState("session",42,0.0,0.0,true,"phone"),false)
+        assertFalse(reply.ok)
+        assertEquals("browser",reply.state!!.clientId)
+        val payload = Json.parseToJsonElement(requests.take().third).jsonObject
+        assertEquals("false",payload.getValue("claim").jsonPrimitive.content)
+    }
+
+    @Test fun restoredSessionUsesEncodedIdAndKeepsImpression() = runBlocking {
+        body = """{"session_id":"s +&","current":{"id":42,"impression_id":"existing"},"fixed":true,"tracks":[{"id":42},{"id":43}]}"""
+        val reply = api.now("s +&")
+        assertEquals("/api/now?session_id=s%20%2B%26",requests.take().second)
+        assertEquals("existing",reply.current!!.impressionId)
+        assertTrue(reply.fixed)
+        assertEquals(2,reply.tracks.size)
+    }
+
+    @Test fun artistPhotosAcceptServerRelativeMapAndKeepUnknownFieldsCompatible() = runBlocking {
+        body = """{"photos":{"сплин":"/api/artist-photos/5"},"count":1,"future":true}"""
+        assertEquals("/api/artist-photos/5",api.artistPhotos().photos["сплин"])
+        assertEquals("/api/artist-photos",requests.take().second)
+        assertEquals("сплин",artistPhotoKey("  СПЛИН "))
+        assertEquals("a b",artistPhotoKey("A\u00a0  B"))
+    }
+
+    @Test fun serverSettingsKeepSecretsOutOfToStringAndSaveExactValues() = runBlocking {
+        body = """{"saved":{"addr":":8787","public_base_url":"https://music.example","library":"/music"},"restart_pending":true,"restart_supported":false,"phone":{"token":"secret-fixture","urls":["https://music.example"]}}"""
+        val reply = api.serverSettings()
+        assertTrue(reply.restartPending)
+        assertFalse(reply.restartSupported)
+        assertEquals("secret-fixture", reply.phone.token)
+        assertFalse(reply.toString().contains("secret-fixture"))
+        assertFalse(reply.phone.toString().contains("secret-fixture"))
+        assertEquals("GET", requests.take().first)
+        api.saveServerSettings(ServerValues("[::1]:9000", "", "/music/Новая папка"))
+        val request = requests.take()
+        assertEquals("PUT", request.first)
+        assertEquals("/api/settings", request.second)
+        val saved = Json.parseToJsonElement(request.third).jsonObject
+        assertEquals("[::1]:9000", saved.getValue("addr").jsonPrimitive.content)
+        assertEquals("", saved.getValue("public_base_url").jsonPrimitive.content)
+        assertEquals("/music/Новая папка", saved.getValue("library").jsonPrimitive.content)
+    }
+
+    @Test fun serverFolderPickerHandlesNullEmptyDirectoriesAndEncodesPath() = runBlocking {
+        body = """{"path":"/music/папка","parent":"/music","dirs":null,"roots":null}"""
+        assertNull(api.serverDirs("/music/папка +").dirs)
+        val request = requests.take()
+        assertEquals("GET", request.first)
+        assertTrue(request.second.contains("%2B"))
+        body = """{"ip":"203.0.113.1"}"""
+        assertEquals("203.0.113.1", api.serverExternalIp().ip)
+        assertEquals("/api/settings/external-ip?refresh=1", requests.take().second)
+        body = """{"ok":true,"restarting":true}"""
+        api.restartServer()
+        assertEquals("POST", requests.take().first)
+    }
+
 }

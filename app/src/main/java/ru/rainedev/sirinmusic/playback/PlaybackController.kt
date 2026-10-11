@@ -23,7 +23,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import ru.rainedev.sirinmusic.data.ApiException
+import ru.rainedev.sirinmusic.data.PlaybackState
 import ru.rainedev.sirinmusic.data.MusikApi
+import ru.rainedev.sirinmusic.data.ServerConnection
 import ru.rainedev.sirinmusic.data.Settings
 import ru.rainedev.sirinmusic.data.Track
 
@@ -67,6 +72,11 @@ class PlaybackController(
     private var ticker: Job? = null
     private var listenedSec = 0.0
     private var startedReported = false
+    private var ownsPlayback = false
+    private var syncUnavailable = false
+    private var syncTicker: Job? = null
+    private var restoreJob: Job? = null
+    private val syncMutex = Mutex()
 
     val player: ExoPlayer by lazy { buildPlayer() }
     val sessionPlayer: SessionPlayer by lazy { SessionPlayer(this) }
@@ -89,7 +99,11 @@ class PlaybackController(
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _ui.update { it.copy(isPlaying = isPlaying) }
-            if (isPlaying) startTicker() else ticker?.cancel()
+            if (isPlaying) { startTicker(); startSyncTicker() }
+            else {
+                ticker?.cancel(); syncTicker?.cancel()
+                if (ownsPlayback) syncOnce()
+            }
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -157,15 +171,22 @@ class PlaybackController(
 
     // ---- управление ----
 
-    fun togglePlay() {
-        if (_ui.value.ended) _ui.value.current?.let { playTrack(it.key) }
-        else if (player.isPlaying) player.pause() else {
-            player.play()
-            startPlaybackService()
-        }
+    fun togglePlay() = setPlaying(!player.playWhenReady)
+
+    fun setPlaying(playing: Boolean) {
+        if (!playing) { player.pause(); return }
+        if (_ui.value.busy) return
+        if (_ui.value.ended) { _ui.value.current?.let { playTrack(it.key) }; return }
+        if (_ui.value.current == null) return
+        beginPlayback(generation)
     }
 
-    fun seekTo(sec: Double) = player.seekTo((sec * 1000).toLong())
+    fun seekTo(sec: Double) {
+        val position = safePlaybackPosition(sec, _ui.value.durationSec)
+        player.seekTo((position * 1000).toLong())
+        _ui.update { it.copy(positionSec = position) }
+        if (ownsPlayback) syncOnce()
+    }
 
     fun skip() = scope.launch { reportAndAdvance("skip") }
 
@@ -261,6 +282,8 @@ class PlaybackController(
         val requestGeneration = generation
         _ui.update { it.copy(busy = true, error = null) }
         try {
+            if (!saveRemoteState(!ownsPlayback, requestGeneration)) return
+            ownsPlayback = true
             val reply = api.event(type, cur.key, snapshot.sessionId, cur.impressionId,
                 snapshot.positionSec, snapshot.durationSec, listenedSec)
             if (requestGeneration != generation) return
@@ -289,9 +312,18 @@ class PlaybackController(
     }
 
     private fun play(track: Track) {
-        listenedSec = 0.0
-        startedReported = false
-        _ui.update { it.copy(current = track, positionSec = 0.0, durationSec = track.duration ?: 0.0, ended = false) }
+        generation++
+        installTrack(track, 0.0, 0.0, resumed = false)
+        beginPlayback(generation)
+    }
+
+    private fun installTrack(track: Track, position: Double, listened: Double, resumed: Boolean) {
+        ownsPlayback = false
+        syncTicker?.cancel()
+        listenedSec = listened.takeIf { it.isFinite() && it >= 0.0 } ?: 0.0
+        startedReported = resumed
+        _ui.update { it.copy(current = track, positionSec = position, durationSec = track.duration ?: 0.0,
+            ended = false, busy = false) }
 
         // Метаданные нужны не для UI, а для экрана блокировки и шторки.
         val metadata = MediaMetadata.Builder()
@@ -306,20 +338,119 @@ class PlaybackController(
             .setMediaMetadata(metadata)
             .build()
 
-        player.setMediaItem(item)
+        player.playWhenReady = false
+        player.setMediaItem(item, (position * 1000).toLong())
         player.prepare()
-        player.play()
-        startPlaybackService()
+    }
 
-        if (!startedReported) {
-            startedReported = true
-            sendSimple("track_start")
+    private fun beginPlayback(expectedGeneration: Int) {
+        _ui.update { it.copy(busy = true, error = null) }
+        scope.launch {
+            try {
+                if (saveRemoteState(true, expectedGeneration, playing = true) && generation == expectedGeneration) {
+                    ownsPlayback = true
+                    player.play()
+                    startPlaybackService()
+                    if (!startedReported) { startedReported = true; sendSimple("track_start") }
+                }
+            } finally { if (generation == expectedGeneration) _ui.update { it.copy(busy = false) } }
+        }
+    }
+
+    private fun startSyncTicker() {
+        syncTicker?.cancel()
+        syncTicker = scope.launch {
+            while (player.isPlaying && ownsPlayback) {
+                delay(5000)
+                if (player.isPlaying && ownsPlayback) saveRemoteState(false, generation)
+            }
+        }
+    }
+
+    private fun syncOnce() {
+        val expected = generation
+        scope.launch { if (ownsPlayback) saveRemoteState(false, expected) }
+    }
+
+    private suspend fun saveRemoteState(claim: Boolean, expected: Int, playing: Boolean = player.isPlaying): Boolean =
+        syncMutex.withLock {
+            if (generation != expected) return@withLock false
+            val snapshot = _ui.value
+            val current = snapshot.current ?: return@withLock false
+            if (syncUnavailable) return@withLock true
+            val state = PlaybackState(snapshot.sessionId.orEmpty(), current.key,
+                safePlaybackPosition(player.currentPosition / 1000.0, snapshot.durationSec),
+                listenedSec, playing, settings.clientId)
+            try {
+                val result = api.savePlaybackState(state, claim)
+                if (generation != expected) return@withLock false
+                if (!result.ok) {
+                    ownsPlayback = false
+                    generation++
+                    player.pause()
+                    syncTicker?.cancel()
+                    _ui.update { it.copy(busy = false, error = "Воспроизведение продолжено на другом устройстве") }
+                    false
+                } else true
+            } catch (e: CancellationException) { throw e }
+            catch (e: ApiException) {
+                if (generation != expected) false
+                else if (e.code == 404) { syncUnavailable = true; true }
+                else { if (generation == expected) _ui.update { it.copy(error = "Не удалось синхронизировать плеер: ${e.message}") }; false }
+            } catch (_: Exception) {
+                if (generation == expected) _ui.update { it.copy(error = "Нет связи для синхронизации плеера") }
+                false
+            }
+        }
+
+    /** Restore once while idle; no autoplay, claim, or duplicate listening event. */
+    fun restoreIfIdle(refreshPaused: Boolean = false) {
+        if (player.playWhenReady || _ui.value.busy || restoreJob?.isActive == true || syncUnavailable) return
+        if (_ui.value.current != null && !refreshPaused) return
+        val expected = generation
+        restoreJob = scope.launch {
+            try {
+                val saved = try { api.playbackState().state }
+                    catch (e: ApiException) { if (e.code == 404) { if (generation == expected) syncUnavailable = true; return@launch }; throw e }
+                if (saved == null || saved.trackId <= 0 || saved.sessionId.isBlank()) return@launch
+                val now = api.now(saved.sessionId)
+                val track = restorableTrack(saved, now) ?: return@launch
+                if (generation != expected || player.playWhenReady || _ui.value.busy) return@launch
+                generation++ // Old pause saves/events must not overwrite the restored session.
+                _ui.update { it.copy(sessionId = now.sessionId, queue = if (now.fixed) now.tracks else now.queue,
+                    fixed = now.fixed, mode = now.mode.orEmpty(), maturity = now.maturity) }
+                installTrack(track, safePlaybackPosition(saved.positionSec, track.duration ?: 0.0), saved.listenedSec, resumed = true)
+            } catch (e: CancellationException) { throw e }
+            catch (e: ApiException) {
+                if (generation == expected && e.code != 404) _ui.update { it.copy(error = "Не удалось восстановить плеер") }
+            } catch (_: Exception) { /* Offline startup keeps the local player idle. */ }
         }
     }
 
     fun stop() {
+        val snapshot = _ui.value
+        val stoppedState = snapshot.current?.takeIf { ownsPlayback && !syncUnavailable }?.let {
+            PlaybackState(snapshot.sessionId.orEmpty(), it.key,
+                safePlaybackPosition(player.currentPosition / 1000.0, snapshot.durationSec),
+                listenedSec, false, settings.clientId)
+        }
+        val stoppedConnection = ServerConnection(settings.baseUrl, settings.token, settings.clientId)
         generation++
+        val expected = generation
+        if (stoppedState != null) scope.launch {
+            syncMutex.withLock {
+                if (generation == expected) {
+                    try { MusikApi(stoppedConnection).savePlaybackState(stoppedState, false) }
+                    catch (e: CancellationException) { throw e }
+                    catch (_: Exception) { /* Logout/stop is local even when the server is unavailable. */ }
+                }
+            }
+        }
         loadJob?.cancel()
+        restoreJob?.cancel()
+        ownsPlayback = false
+        syncTicker?.cancel()
+        syncUnavailable = false
         player.stop()
         player.clearMediaItems()
         ticker?.cancel()

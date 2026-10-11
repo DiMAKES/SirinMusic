@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material3.TextButton
+import ru.rainedev.sirinmusic.data.AccountProfile
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -51,21 +53,33 @@ fun LoginScreen(
     onSubmit: (String, String) -> Unit,
     pendingLink: ConnectLink? = null,
     consumeLink: () -> ConnectLink? = { null },
+    onPasswordSubmit: (String, String, String) -> Unit,
+    profiles: List<AccountProfile> = emptyList(),
+    onChooseProfile: (String) -> Unit,
+    onCancelProfiles: () -> Unit,
+    onAnonymousSubmit: (String) -> Unit,
+
 ) {
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken) }
+    var passwordMode by remember { mutableStateOf(initialToken.isBlank()) }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var scanHint by remember { mutableStateOf<String?>(null) }
 
     // A scanned QR (or a musik:// link) replaces both fields; see LoginForm.withLink.
     fun useLink(link: ConnectLink) {
+        onCancelProfiles()
+        password = ""
         val next = LoginForm(url, token).withLink(link)
         url = next.form.url
         token = next.form.token
         if (next.signIn) {
+            passwordMode = false
             scanHint = null
             onSubmit(next.form.url, next.form.token)
         } else {
-            scanHint = "В QR-коде только адрес сервера — введи API-токен."
+            scanHint = "В QR-коде только адрес сервера — войди по паролю или введи токен."
         }
     }
 
@@ -131,6 +145,18 @@ fun LoginScreen(
                 .padding(top = 8.dp, bottom = 8.dp),
         )
 
+        if (profiles.isNotEmpty()) {
+            Text("Выбери профиль", style = MaterialTheme.typography.titleLarge)
+            Text("Этот телефон будет подключён к выбранному профилю.",
+                style = MaterialTheme.typography.bodyMedium)
+            profiles.forEach { profile ->
+                OutlinedButton(onClick = { onChooseProfile(profile.id) }, enabled = !checking,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(profile.name + if (profile.isDefault) " · основной" else "")
+                }
+            }
+            TextButton(onClick = { onCancelProfiles(); password = "" }, enabled = !checking) { Text("Назад") }
+        } else {
         OutlinedTextField(
             value = url,
             onValueChange = { url = it },
@@ -142,6 +168,21 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        TextButton(onClick = { passwordMode = !passwordMode; password = ""; scanHint = null },
+            enabled = !checking) {
+            Text(if (passwordMode) "Войти по токену" else "Войти по паролю")
+        }
+        if (passwordMode) {
+            OutlinedTextField(value = username, onValueChange = { username = it },
+                label = { Text("Имя пользователя") },
+                supportingText = { Text("Для сервера с одним владельцем оставь пустым") },
+                singleLine = true, enabled = !checking, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = password, onValueChange = { password = it },
+                label = { Text("Пароль") }, singleLine = true, enabled = !checking,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp))
+        } else {
         OutlinedTextField(
             value = token,
             onValueChange = { token = it },
@@ -155,6 +196,8 @@ fun LoginScreen(
                 .padding(top = 12.dp),
         )
 
+        }
+        }
         if (error != null) {
             Text(
                 error,
@@ -164,9 +207,11 @@ fun LoginScreen(
             )
         }
 
-        Button(
-            onClick = { onSubmit(url, token) },
-            enabled = !checking && url.isNotBlank() && token.isNotBlank(),
+        if (profiles.isEmpty()) Button(
+            onClick = {
+                if (passwordMode) onPasswordSubmit(url, username, password) else onSubmit(url, token)
+            },
+            enabled = !checking && url.isNotBlank() && (if (passwordMode) password.isNotEmpty() else token.isNotBlank()),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 20.dp),
@@ -175,6 +220,11 @@ fun LoginScreen(
                 CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
             }
             Text("Проверить и войти")
+        }
+        if (profiles.isNotEmpty() && checking) CircularProgressIndicator(Modifier.padding(top = 12.dp))
+        if (profiles.isEmpty()) TextButton(onClick = { onAnonymousSubmit(url) },
+            enabled = !checking && url.isNotBlank()) {
+            Text("Подключиться без авторизации")
         }
     }
     }

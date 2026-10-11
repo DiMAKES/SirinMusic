@@ -230,3 +230,56 @@ data class Lyrics(
 )
 @Serializable data class SharesReply(val shares: List<RadioShare> = emptyList())
 @Serializable data class MixJob(val id: Long = 0, val status: String = "", val error: String? = null)
+
+@Serializable
+data class AuthStatus(val ok: Boolean = false,
+    @SerialName("auth_enabled") val authEnabled: Boolean = true,
+    @SerialName("multi_user") val multiUser: Boolean = false)
+
+@Serializable
+data class AccountProfile(val id: String, val name: String,
+    @SerialName("is_default") val isDefault: Boolean = false)
+
+@Serializable
+data class DeviceToken(
+    val id: String,
+    @SerialName("profile_id") val profileId: String,
+    @SerialName("profile_name") val profileName: String = "",
+    @SerialName("expires_at") val expiresAt: String = "")
+
+@Serializable
+class TokenReply(val token: String, val device: DeviceToken? = null,
+    val profiles: List<AccountProfile> = emptyList())
+
+@Serializable
+data class PlaybackState(
+    @SerialName("session_id") val sessionId: String = "",
+    @SerialName("track_id") val trackId: Long,
+    @SerialName("position_sec") val positionSec: Double = 0.0,
+    @SerialName("listened_sec") val listenedSec: Double = 0.0,
+    val playing: Boolean = false,
+    @SerialName("client_id") val clientId: String = "",
+    @SerialName("updated_at") val updatedAt: String = "")
+
+@Serializable
+data class PlaybackStateReply(val ok: Boolean = false, val state: PlaybackState? = null,
+    val track: Track? = null)
+
+@Serializable
+data class ArtistPhotosReply(val photos: Map<String, String> = emptyMap(), val count: Int = 0)
+
+fun artistPhotoKey(name: String): String = name.trim().split(Regex("[\\s\\p{Z}]+"))
+    .joinToString(" ").lowercase(java.util.Locale.ROOT)
+
+@kotlinx.serialization.Serializable
+data class ServerValues(val addr: String = "", @SerialName("public_base_url") val publicUrl: String = "", val library: String = "")
+@kotlinx.serialization.Serializable
+class ServerPhone(val urls: List<String> = emptyList(), @SerialName("auth_enabled") val authEnabled: Boolean = false, val token: String = "", val openapi: String = "/api/openapi.json")
+@kotlinx.serialization.Serializable
+class ServerSettingsReply(val running: ServerValues = ServerValues(), val saved: ServerValues = ServerValues(), @SerialName("restart_pending") val restartPending: Boolean = false, @SerialName("restart_supported") val restartSupported: Boolean = false, @SerialName("env_path") val envPath: String = "", @SerialName("local_ips") val localIps: List<String> = emptyList(), val phone: ServerPhone = ServerPhone())
+@kotlinx.serialization.Serializable
+data class ServerDir(val name: String = "", val path: String = "")
+@kotlinx.serialization.Serializable
+data class ServerDirs(val path: String = "", val parent: String = "", val dirs: List<ServerDir>? = emptyList(), val roots: List<ServerDir>? = emptyList())
+@kotlinx.serialization.Serializable
+data class ServerExternalIp(val ip: String = "", val source: String = "", @SerialName("checked_at") val checkedAt: String = "")

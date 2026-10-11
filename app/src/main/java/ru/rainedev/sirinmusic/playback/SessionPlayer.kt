@@ -28,15 +28,16 @@ class SessionPlayer(private val controller: PlaybackController) : ForwardingSimp
             }
             return future
         }
+        if (positionMs >= 0) {
+            controller.seekTo(positionMs / 1000.0)
+            return Futures.immediateVoidFuture()
+        }
         return super.handleSeek(mediaItemIndex, positionMs, seekCommand)
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {
-        if (playWhenReady && controller.ui.value.ended) {
-            controller.togglePlay()
-            return Futures.immediateVoidFuture()
-        }
-        return super.handleSetPlayWhenReady(playWhenReady)
+        controller.setPlaying(playWhenReady)
+        return Futures.immediateVoidFuture()
     }
 
     override fun handleStop(): ListenableFuture<*> {

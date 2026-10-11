@@ -82,13 +82,19 @@ private fun SirinContent(app: SirinApp) {
     val player by vm.playback.ui.collectAsStateWithLifecycle()
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, vm) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) vm.syncConnection() }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) {
+            vm.syncConnection()
+            vm.refreshPausedPlayback()
+        } }
         owner.lifecycle.addObserver(observer); vm.syncConnection()
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
     if (!state.loggedIn) {
         LoginScreen(vm.savedUrl, vm.savedToken, state.checking, state.loginError, vm::login,
-            pendingLink, vm.pendingLink::consume)
+            pendingLink, vm.pendingLink::consume,
+            onPasswordSubmit = vm::loginPassword, profiles = state.loginProfiles,
+            onChooseProfile = vm::chooseLoginProfile, onCancelProfiles = vm::cancelAccountLogin,
+            onAnonymousSubmit = vm::loginWithoutToken)
         return
     }
     LaunchedEffect(pendingLink) {

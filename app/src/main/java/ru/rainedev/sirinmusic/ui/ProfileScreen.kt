@@ -26,6 +26,7 @@ fun ProfileScreen(
     onRestoreRule: (String?) -> Unit, onCreateShare: () -> Unit,
     onShare: (RadioShare) -> Unit, onRevokeShare: (String) -> Unit,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(contentPadding).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -55,6 +56,9 @@ fun ProfileScreen(
         }
         FilledTonalButton(onClick = onFavorites, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Rounded.Favorite, null); Spacer(Modifier.width(8.dp)); Text("Открыть избранное")
+        }
+        OutlinedButton(onClick = { context.startActivity(android.content.Intent(context, ru.rainedev.sirinmusic.ServerSettingsActivity::class.java)) }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Rounded.Dns, null); Spacer(Modifier.width(8.dp)); Text("Настройки сервера")
         }
         ProfileDetails(state, contextIds, hasSession, onExplore, onCreateContext, onToggleContext,
             onDeleteContext, onRestoreRule, onCreateShare, onShare, onRevokeShare)

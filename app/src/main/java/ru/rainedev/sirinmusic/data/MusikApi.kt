@@ -104,6 +104,49 @@ class MusikApi(private val settings: ConnectionSettings) {
     private suspend inline fun <reified T> post(path: String, body: String = "{}"): T =
         withContext(Dispatchers.Default) { json.decodeFromString(raw(path, body)) }
 
+    suspend fun serverSettings(): ServerSettingsReply = get("/api/settings")
+    suspend fun saveServerSettings(values: ServerValues): ServerSettingsReply =
+        json.decodeFromString(raw("/api/settings", "{\"addr\":${quote(values.addr)},\"public_base_url\":${quote(values.publicUrl)},\"library\":${quote(values.library)}}", "PUT"))
+    suspend fun serverDirs(path: String): ServerDirs = get("/api/settings/dirs?path=${segment(path)}")
+    suspend fun serverExternalIp(): ServerExternalIp = get("/api/settings/external-ip?refresh=1")
+    suspend fun restartServer() { raw("/api/settings/restart", "{}") }
+
+    suspend fun authStatus(): AuthStatus = get("/api/auth/me")
+
+    suspend fun passwordToken(username: String, password: String, profileId: String? = null): TokenReply {
+        require(password.isNotEmpty()) { "Введи пароль" }
+        val body = buildString {
+            append("{\"password\":${quote(password)},\"device_name\":\"Sirin Music Android\"")
+            if (username.isNotBlank()) append(",\"username\":${quote(username.trim())}")
+            if (profileId != null) append(",\"profile_id\":${quote(profileId)}")
+            append("}")
+        }
+        return post("/api/auth/token", body)
+    }
+
+    /** Health is public; only auth/me can validate the supplied credential. */
+    suspend fun validateConnection(): Health {
+        val status = authStatus()
+        check(status.ok) { "Сервер отклонил токен. Войди снова." }
+        return health().also { check(it.ok) { "Сервер ответил, но не готов" } }
+    }
+
+    suspend fun validateAnonymousConnection(): Health {
+        val status = authStatus()
+        check(status.ok && !status.authEnabled && !status.multiUser) {
+            "Сервер требует авторизацию. Войди по паролю, QR или токену."
+        }
+        return health().also { check(it.ok) { "Сервер ответил, но не готов" } }
+    }
+
+    suspend fun playbackState(): PlaybackStateReply = get("/api/playback/state")
+    suspend fun savePlaybackState(state: PlaybackState, claim: Boolean): PlaybackStateReply {
+        val body = """{"session_id":${quote(state.sessionId)},"track_id":${state.trackId},"position_sec":${fmt(state.positionSec)},"listened_sec":${fmt(state.listenedSec)},"playing":${state.playing},"client_id":${quote(state.clientId)},"claim":$claim}"""
+        return json.decodeFromString(raw("/api/playback/state", body, "PUT"))
+    }
+    suspend fun now(sessionId: String): RadioStart = get("/api/now?session_id=${segment(sessionId)}")
+    suspend fun artistPhotos(): ArtistPhotosReply = get("/api/artist-photos")
+
     suspend fun health(): Health = get("/api/health")
 
     suspend fun startRadio(seedTrackId: Long? = null): RadioStart =

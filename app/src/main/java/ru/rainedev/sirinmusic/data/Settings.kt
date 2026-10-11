@@ -32,7 +32,7 @@ class Settings(context: Context) : ConnectionSettings {
 
     override var token: String
         get() = prefs.getString(KEY_TOKEN, "").orEmpty()
-        set(value) = prefs.edit().putString(KEY_TOKEN, value.trim()).apply()
+        set(value) = prefs.edit().putString(KEY_TOKEN, value.trim()).putBoolean(KEY_AUTH_DISABLED, false).apply()
 
     private val appearancePrefs = context.getSharedPreferences("sirin_appearance", Context.MODE_PRIVATE)
     private val _appearance = MutableStateFlow(Appearance(
@@ -49,8 +49,8 @@ class Settings(context: Context) : ConnectionSettings {
         _appearance.value = value
     }
 
-    fun setConnection(url: String, apiToken: String) {
-        prefs.edit().putString(KEY_URL, url.trim().trimEnd('/')).putString(KEY_TOKEN, apiToken.trim()).apply()
+    fun setConnection(url: String, apiToken: String, authDisabled: Boolean = false) {
+        prefs.edit().putString(KEY_URL, url.trim().trimEnd('/')).putString(KEY_TOKEN, apiToken.trim()).putBoolean(KEY_AUTH_DISABLED, authDisabled).apply()
     }
 
     /** Один и тот же id во всех событиях — по нему сервер отличает устройства. */
@@ -59,13 +59,14 @@ class Settings(context: Context) : ConnectionSettings {
             prefs.edit().putString(KEY_CLIENT, it).apply()
         }
 
-    val isConfigured: Boolean get() = baseUrl.isNotEmpty() && token.isNotEmpty()
+    val isConfigured: Boolean get() = baseUrl.isNotEmpty() && (token.isNotEmpty() || prefs.getBoolean(KEY_AUTH_DISABLED, false))
 
-    fun clear() = prefs.edit().remove(KEY_URL).remove(KEY_TOKEN).apply()
+    fun clear() = prefs.edit().remove(KEY_URL).remove(KEY_TOKEN).remove(KEY_AUTH_DISABLED).apply()
 
     private companion object {
         const val KEY_URL = "base_url"
         const val KEY_TOKEN = "api_token"
+        const val KEY_AUTH_DISABLED = "auth_disabled"
         const val KEY_CLIENT = "client_id"
     }
 }

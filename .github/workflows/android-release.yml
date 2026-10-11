@@ -78,6 +78,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: actions/download-artifact@v8
         with:
           name: signed-release
@@ -92,7 +95,13 @@ jobs:
           if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" release-files/* --clobber
           else
-            release_args=(--verify-tag --generate-notes --title "Sirin Music ${RELEASE_TAG#v}")
+            release_args=(--verify-tag --title "Sirin Music ${RELEASE_TAG#v}")
+            notes_file="docs/releases/${RELEASE_TAG#v}.md"
+            if [[ -f "$notes_file" ]]; then
+              release_args+=(--notes-file "$notes_file")
+            else
+              release_args+=(--generate-notes)
+            fi
             if [[ "$RELEASE_TAG" == *-* ]]; then
               release_args+=(--prerelease)
             fi

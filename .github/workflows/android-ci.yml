@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SIRIN_VERSION_NAME: 2.0rc0.7-dev
-      SIRIN_VERSION_CODE: 2
+      SIRIN_VERSION_NAME: 2.0.0
+      SIRIN_VERSION_CODE: 3
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/android-environment
@@ -44,8 +44,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      SIRIN_VERSION_NAME: 2.0rc0.7-dev
-      SIRIN_VERSION_CODE: 2
+      SIRIN_VERSION_NAME: 2.0.0
+      SIRIN_VERSION_CODE: 3
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/android-environment
@@ -79,7 +79,7 @@ jobs:
           (cd dev-files && sha256sum ./*.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v7
         with:
-          name: sirin-music-2.0rc0.7-dev
+          name: sirin-music-2.0.0
           path: dev-files/
           if-no-files-found: error
       - name: Remove signing key

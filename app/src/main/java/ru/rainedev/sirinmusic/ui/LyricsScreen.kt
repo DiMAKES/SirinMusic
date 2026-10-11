@@ -17,7 +17,14 @@ import ru.rainedev.sirinmusic.data.*
 import ru.rainedev.sirinmusic.playback.PlayerUi
 
 @Composable
-fun LyricsScreen(api: MusikApi, player: PlayerUi, onSeek: (Double) -> Unit, contentPadding: PaddingValues) {
+fun LyricsScreen(
+    api: MusikApi,
+    player: PlayerUi,
+    onSeek: (Double) -> Unit,
+    contentPadding: PaddingValues,
+    // false inside the tablet player, which already shows the title and artist.
+    showTitle: Boolean = true,
+) {
     val id = player.current?.key
     var lyrics by remember(id) { mutableStateOf<Lyrics?>(null) }
     var loading by remember(id) { mutableStateOf(id != null) }
@@ -43,8 +50,10 @@ fun LyricsScreen(api: MusikApi, player: PlayerUi, onSeek: (Double) -> Unit, cont
     LazyColumn(state = list, contentPadding = contentPadding, modifier = Modifier.fillMaxSize()) {
         item {
             Column(Modifier.padding(16.dp)) {
-                Text(player.current?.title ?: "Ничего не играет", style = MaterialTheme.typography.titleLarge)
-                player.current?.artist?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (showTitle) {
+                    Text(player.current?.title ?: "Ничего не играет", style = MaterialTheme.typography.titleLarge)
+                    player.current?.artist?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
                 if (lines.isNotEmpty()) ListItem(headlineContent = { Text("Следовать за музыкой") },
                     supportingContent = { Text("Нажми на строку, чтобы перейти к ней") },
                     trailingContent = { Switch(follow, onCheckedChange = { follow = it }) })

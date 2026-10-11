@@ -203,7 +203,8 @@ private fun SirinContent(app: SirinApp) {
                             { id, index -> if (player.fixed) vm.playback.jumpToIndex(index) else vm.playback.jumpTo(id) }, padding, onLike = vm.playback::like,
                             onLyrics = { nav.navigate("lyrics") }, onAddToPlaylist = { addTrackId = player.current?.key },
                             favoriteBusy = player.current?.let { "favorite:${it.key}" in state.busy } == true,
-                            onPrevious = { vm.playback.previous() })
+                            onPrevious = { vm.playback.previous() },
+                            lyrics = { LyricsScreen(app.api, player, vm.playback::seekTo, PaddingValues(0.dp), showTitle = false) })
                     }
                     composable("lyrics") { LyricsScreen(app.api, player, vm.playback::seekTo, padding) }
                     composable("profile") {

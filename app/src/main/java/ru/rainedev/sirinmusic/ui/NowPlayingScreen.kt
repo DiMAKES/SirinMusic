@@ -5,6 +5,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,12 +27,17 @@ import androidx.compose.material.icons.rounded.ThumbUp
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -55,14 +61,19 @@ fun NowPlayingScreen(
     onAddToPlaylist: () -> Unit,
     favoriteBusy: Boolean,
     onPrevious: () -> Unit,
+    lyrics: @Composable () -> Unit = {},
 ) {
     val track = ui.current
-    val controls: @Composable () -> Unit = {
+    // Phone: artwork on top, "Текст песни" opens its own screen. Tablet: the right
+    // pane shows the artwork, and the lyrics or the queue take its place instead.
+    val controls: @Composable (tablet: Boolean) -> Unit = { tablet ->
             Column(
                 Modifier.fillMaxWidth().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                BoxWithConstraints { Artwork(artworkUrl(track?.artworkPath, 640), maxWidth.coerceAtMost(320.dp), corner = 20.dp) }
+                if (!tablet) {
+                    BoxWithConstraints { Artwork(artworkUrl(track?.artworkPath, 640), maxWidth.coerceAtMost(320.dp), corner = 20.dp) }
+                }
 
                 Text(
                     track?.title ?: "Ничего не играет",
@@ -122,7 +133,7 @@ fun NowPlayingScreen(
                     FavoriteButton(track != null && track.key in ui.favorites, track != null && !favoriteBusy, onFavorite)
                 }
                 Row {
-                    TextButton(onClick = onLyrics, enabled = track != null) { Text("Текст песни") }
+                    if (!tablet) TextButton(onClick = onLyrics, enabled = track != null) { Text("Текст песни") }
                     TextButton(onClick = onAddToPlaylist, enabled = track != null) { Text("В плейлист") }
                 }
 
@@ -151,18 +162,43 @@ fun NowPlayingScreen(
         if (ui.queue.isEmpty()) item { Text("Очередь пуста", Modifier.padding(24.dp)) }
     }
     BoxWithConstraints(Modifier.fillMaxSize().padding(contentPadding)) {
-        if (maxWidth >= 840.dp) {
-            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                    controls()
+        if (maxWidth >= 600.dp) {
+            var pane by rememberSaveable { mutableStateOf(NowPane.Artwork) }
+            fun toggle(target: NowPane) { pane = if (pane == target) NowPane.Artwork else target }
+            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                // Left: the track, seek bar, transport, like/dislike and favorite.
+                Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) { controls(true) }
                 }
-                LazyColumn(Modifier.weight(1f).fillMaxHeight(), contentPadding = PaddingValues(vertical = 24.dp), content = queue)
+                // Right: "Текст" and "Далее" swap the artwork for the lyrics or the queue;
+                // the active toggle brings the artwork back.
+                Column(Modifier.weight(1.2f).fillMaxHeight().padding(vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = pane == NowPane.Lyrics, onClick = { toggle(NowPane.Lyrics) },
+                            enabled = track != null, label = { Text("Текст") })
+                        FilterChip(selected = pane == NowPane.Queue, onClick = { toggle(NowPane.Queue) },
+                            label = { Text("Далее") })
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth().padding(top = 16.dp), contentAlignment = Alignment.Center) {
+                        when (pane) {
+                            NowPane.Artwork -> BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Artwork(artworkUrl(track?.artworkPath, 640), minOf(maxWidth, maxHeight).coerceAtMost(640.dp), corner = 24.dp)
+                            }
+                            NowPane.Lyrics -> lyrics()
+                            NowPane.Queue -> LazyColumn(Modifier.fillMaxSize(), content = queue)
+                        }
+                    }
+                }
             }
         } else {
             LazyColumn(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-                item { controls() }
+                item { controls(false) }
                 queue()
             }
         }
     }
 }
+
+/** What the right pane of the tablet player shows. */
+private enum class NowPane { Artwork, Lyrics, Queue }

@@ -19,12 +19,13 @@ enum class SettingsPage(val title: String, val summary: String, val icon: ImageV
 @Composable
 fun SettingsMenu(
     selected: SettingsPage?, onSelect: (SettingsPage) -> Unit,
-    onUpdates: () -> Unit, onAbout: () -> Unit, onServer: () -> Unit,
+    onUpdates: () -> Unit, onAbout: () -> Unit, onServer: () -> Unit, onAccount: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SettingsPage.entries.forEach { page ->
             SettingsMenuItem(page.title, page.summary, page.icon, selected == page) { onSelect(page) }
         }
+        SettingsMenuItem("Аккаунт и профили", "Пароль, профили, устройства и пользователи", Icons.Rounded.ManageAccounts) { onAccount() }
         SettingsMenuItem("Настройки сервера", "Сеть, музыка и подключение телефона", Icons.Rounded.Dns) { onServer() }
         SettingsMenuItem("Обновления", "Версия приложения и проверки обновлений", Icons.Rounded.SystemUpdate) { onUpdates() }
         SettingsMenuItem("О приложении", "Sirin Music и разработчик", Icons.Rounded.Info) { onAbout() }

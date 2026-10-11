@@ -106,10 +106,11 @@ fun LoginScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.primaryContainer,
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = androidx.compose.ui.graphics.Color(0xFF211C19),
             modifier = Modifier.padding(bottom = 20.dp)) {
-            Icon(Icons.Rounded.MusicNote, null, Modifier.padding(20.dp).size(40.dp),
-                tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(ru.rainedev.sirinmusic.R.drawable.ic_launcher_foreground),
+                contentDescription = "Sirin Music", modifier = Modifier.size(88.dp))
         }
         Text("Sirin Music", style = MaterialTheme.typography.displaySmall)
         Text(
@@ -123,6 +124,7 @@ fun LoginScreen(
             onClick = {
                 scanner.launch(
                     ScanOptions()
+                        .setCaptureActivity(ru.rainedev.sirinmusic.ui.qr.QrScanActivity::class.java)
                         .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
                         .setPrompt("Наведи камеру на QR-код: веб-интерфейс musik → Профиль → Настройки")
                         .setBeepEnabled(false)

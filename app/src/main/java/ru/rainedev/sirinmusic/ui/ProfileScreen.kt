@@ -57,6 +57,9 @@ fun ProfileScreen(
         FilledTonalButton(onClick = onFavorites, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Rounded.Favorite, null); Spacer(Modifier.width(8.dp)); Text("Открыть избранное")
         }
+        OutlinedButton(onClick = { context.startActivity(android.content.Intent(context, ru.rainedev.sirinmusic.AccountActivity::class.java)) }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Rounded.ManageAccounts, null); Spacer(Modifier.width(8.dp)); Text("Аккаунт и профили")
+        }
         OutlinedButton(onClick = { context.startActivity(android.content.Intent(context, ru.rainedev.sirinmusic.ServerSettingsActivity::class.java)) }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Rounded.Dns, null); Spacer(Modifier.width(8.dp)); Text("Настройки сервера")
         }

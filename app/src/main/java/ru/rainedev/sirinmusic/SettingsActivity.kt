@@ -79,6 +79,8 @@ private fun SettingsScreen(app: SirinApp, appearance: Appearance, onBack: () -> 
                     Text("Настрой приложение под себя", style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.padding(bottom = 16.dp))
                     SettingsMenu(activePage, { pageName = it.name },
+                        onAccount = { app.startActivity(android.content.Intent(app, AccountActivity::class.java)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) },
                         onServer = { app.startActivity(android.content.Intent(app, ServerSettingsActivity::class.java)
                             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) },
                         onUpdates = { app.startActivity(android.content.Intent(app, UpdatesActivity::class.java)

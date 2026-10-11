@@ -41,7 +41,9 @@
             android:name="com.journeyapps.barcodescanner.CaptureActivity"
             android:screenOrientation="fullSensor"
             tools:replace="screenOrientation" />
+        <activity android:name=".AccountActivity" android:exported="false" />
         <activity android:name=".ServerSettingsActivity" android:exported="false" />
+        <activity android:name=".ui.qr.QrScanActivity" android:exported="false" />
         <activity android:name=".SettingsActivity" android:exported="false" />
         <activity android:name=".UpdatesActivity" android:exported="false" />
         <activity android:name=".AboutActivity" android:exported="false" />

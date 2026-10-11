@@ -16,6 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,7 +36,10 @@ fun Artwork(
     size: Dp,
     modifier: Modifier = Modifier,
     corner: Dp = 12.dp,
+    fallbackUrl: String? = null,
 ) {
+    var photoFailed by remember(url, fallbackUrl) { mutableStateOf(false) }
+    val shownUrl = if (photoFailed) fallbackUrl else url
     Surface(
         modifier = modifier.size(size),
         shape = RoundedCornerShape(corner),
@@ -40,8 +47,9 @@ fun Artwork(
     ) {
         Box(Modifier.fillMaxSize()) {
             Placeholder()
-            if (url != null) AsyncImage(
-                model = url,
+            if (shownUrl != null) AsyncImage(
+                model = shownUrl,
+                onError = { photoFailed = true },
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -100,6 +108,7 @@ fun RowCard(
     artworkUrl: String?,
     title: String,
     subtitle: String?,
+    fallbackArtworkUrl: String? = null,
     trailing: @Composable (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
@@ -114,7 +123,7 @@ fun RowCard(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Artwork(artworkUrl, 52.dp)
+            Artwork(artworkUrl, 52.dp, fallbackUrl = fallbackArtworkUrl)
             TwoLine(
                 title = title,
                 subtitle = subtitle,

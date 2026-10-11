@@ -118,8 +118,12 @@ data class FavoriteReply(
 data class Profile(
     val maturity: String? = null,
     val plays: Int? = null,
-    val likes: Int? = null,
-    val skips: Int? = null,
+    @SerialName("n_positive") val likes: Int? = null,
+    @SerialName("n_negative") val skips: Int? = null,
+    @SerialName("explore_lo") val exploreLo: Double? = null,
+    @SerialName("explore_hi") val exploreHi: Double? = null,
+    @SerialName("explore_ratio") val exploreRatio: Double? = null,
+    @SerialName("top_artists") val topArtists: List<TopArtist> = emptyList(),
     @SerialName("tracks_ready") val tracksReady: Int? = null,
 )
 
@@ -185,3 +189,97 @@ data class Lyrics(
     val status: String = "absent",
     val source: String = "",
 )
+
+@Serializable data class TopArtist(val artist: String = "", val count: Int = 0)
+@Serializable data class WeeklyMetrics(
+    @SerialName("window_days") val windowDays: Int? = null,
+    val overall: Outcome? = null, val breakdowns: List<Outcome> = emptyList(),
+)
+@Serializable data class Outcome(
+    val dimension: String? = null, val value: String? = null, val played: Int? = null,
+    @SerialName("unique_artists") val uniqueArtists: Int? = null,
+    @SerialName("finish_rate") val finishRate: Double? = null,
+    @SerialName("early_skip_rate") val skipRate: Double? = null,
+)
+@Serializable data class Recommendations(
+    @SerialName("last_policy") val lastPolicy: LastPolicy? = null,
+)
+@Serializable data class LastPolicy(val policy: RadioPolicy? = null)
+@Serializable data class RadioPolicy(
+    @SerialName("explore_share") val exploreShare: Double? = null,
+    val bounds: List<Double> = emptyList(),
+)
+@Serializable data class TasteContext(
+    @SerialName("context_id") val id: String = "", val name: String = "", val kind: String = "mood",
+)
+@Serializable data class ContextsReply(val contexts: List<TasteContext> = emptyList())
+@Serializable data class ContextActivation(
+    @SerialName("context_ids") val contextIds: List<String> = emptyList(),
+)
+@Serializable data class RadioRule(
+    @SerialName("rule_id") val id: String = "",
+    @SerialName("target_type") val targetType: String = "",
+    @SerialName("target_key") val targetKey: String = "",
+    val action: String = "", val remaining: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+)
+@Serializable data class RulesReply(val rules: List<RadioRule> = emptyList())
+@Serializable data class RadioShare(
+    val token: String = "", val name: String = "", val url: String = "", val active: Boolean = true,
+    @SerialName("listen_count") val listenCount: Int = 0,
+)
+@Serializable data class SharesReply(val shares: List<RadioShare> = emptyList())
+@Serializable data class MixJob(val id: Long = 0, val status: String = "", val error: String? = null)
+
+@Serializable
+data class AuthStatus(val ok: Boolean = false,
+    @SerialName("auth_enabled") val authEnabled: Boolean = true,
+    @SerialName("multi_user") val multiUser: Boolean = false)
+
+@Serializable
+data class AccountProfile(val id: String, val name: String,
+    @SerialName("is_default") val isDefault: Boolean = false)
+
+@Serializable
+data class DeviceToken(
+    val id: String,
+    @SerialName("profile_id") val profileId: String,
+    @SerialName("profile_name") val profileName: String = "",
+    @SerialName("expires_at") val expiresAt: String = "")
+
+@Serializable
+class TokenReply(val token: String, val device: DeviceToken? = null,
+    val profiles: List<AccountProfile> = emptyList())
+
+@Serializable
+data class PlaybackState(
+    @SerialName("session_id") val sessionId: String = "",
+    @SerialName("track_id") val trackId: Long,
+    @SerialName("position_sec") val positionSec: Double = 0.0,
+    @SerialName("listened_sec") val listenedSec: Double = 0.0,
+    val playing: Boolean = false,
+    @SerialName("client_id") val clientId: String = "",
+    @SerialName("updated_at") val updatedAt: String = "")
+
+@Serializable
+data class PlaybackStateReply(val ok: Boolean = false, val state: PlaybackState? = null,
+    val track: Track? = null)
+
+@Serializable
+data class ArtistPhotosReply(val photos: Map<String, String> = emptyMap(), val count: Int = 0)
+
+fun artistPhotoKey(name: String): String = name.trim().split(Regex("[\\s\\p{Z}]+"))
+    .joinToString(" ").lowercase(java.util.Locale.ROOT)
+
+@kotlinx.serialization.Serializable
+data class ServerValues(val addr: String = "", @SerialName("public_base_url") val publicUrl: String = "", val library: String = "")
+@kotlinx.serialization.Serializable
+class ServerPhone(val urls: List<String> = emptyList(), @SerialName("auth_enabled") val authEnabled: Boolean = false, val token: String = "", val openapi: String = "/api/openapi.json")
+@kotlinx.serialization.Serializable
+class ServerSettingsReply(val running: ServerValues = ServerValues(), val saved: ServerValues = ServerValues(), @SerialName("restart_pending") val restartPending: Boolean = false, @SerialName("restart_supported") val restartSupported: Boolean = false, @SerialName("env_path") val envPath: String = "", @SerialName("local_ips") val localIps: List<String> = emptyList(), val phone: ServerPhone = ServerPhone())
+@kotlinx.serialization.Serializable
+data class ServerDir(val name: String = "", val path: String = "")
+@kotlinx.serialization.Serializable
+data class ServerDirs(val path: String = "", val parent: String = "", val dirs: List<ServerDir>? = emptyList(), val roots: List<ServerDir>? = emptyList())
+@kotlinx.serialization.Serializable
+data class ServerExternalIp(val ip: String = "", val source: String = "", @SerialName("checked_at") val checkedAt: String = "")

@@ -17,8 +17,8 @@ android {
         applicationId = "ru.rainedev.sirinmusic"
         minSdk = 27
         targetSdk = 36
-        versionCode = providers.environmentVariable("SIRIN_VERSION_CODE").orNull?.toInt() ?: 1
-        versionName = providers.environmentVariable("SIRIN_VERSION_NAME").orNull ?: "1.0-dev"
+        versionCode = providers.environmentVariable("SIRIN_VERSION_CODE").orNull?.toInt() ?: 3
+        versionName = providers.environmentVariable("SIRIN_VERSION_NAME").orNull ?: "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -80,6 +80,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    implementation(libs.zxing.android.embedded)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

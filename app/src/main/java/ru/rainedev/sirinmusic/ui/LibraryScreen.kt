@@ -11,6 +11,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ru.rainedev.sirinmusic.AppState
+import ru.rainedev.sirinmusic.data.artistPhotoKey
 import ru.rainedev.sirinmusic.data.filterLibrary
 import ru.rainedev.sirinmusic.data.trackMatches
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +74,9 @@ fun LibraryScreen(state: AppState, ratings: Map<Long, String>, ratingPending: Se
                         { onTrack(t.key) }, { onFavorite(t.key) }, { onRate(t.key, it) }, { onAddToPlaylist(t.key) })
                 }
                 1 -> items(shownArtists, key = { it.artist }) { a ->
-                    RowCard(artworkUrl(a.artwork ?: a.coverTrackId?.let { "/api/artwork/$it" }, 96), a.artist, "${a.tracks} треков",
+                    val cover = artworkUrl(a.artwork ?: a.coverTrackId?.let { "/api/artwork/$it" }, 96)
+                    val photo = artworkUrl(state.artistPhotos[artistPhotoKey(a.artist)], 96)
+                    RowCard(photo ?: cover, a.artist, "${a.tracks} треков", fallbackArtworkUrl = cover,
                         trailing = { FavoriteButton(a.artist in state.favoriteArtists, "artist:${a.artist}" !in state.busy) { onArtistFavorite(a.artist) } },
                         onClick = { onArtist(a.artist) })
                 }
